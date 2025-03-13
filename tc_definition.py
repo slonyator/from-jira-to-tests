@@ -139,7 +139,7 @@ class TestCaseGenerator(dspy.Module):
         super().__init__()
         self.signature = UserStoryToTestCase
         base_predictor = dspy.Predict(self.signature)
-        optimizer = BootstrapFewShot(metric=lambda example, pred: True)
+        optimizer = BootstrapFewShot(metric=lambda _example, _pred: True)
         self.generate = optimizer.compile(base_predictor, trainset=examples)
 
     def forward(self, user_story):
