@@ -1,4 +1,5 @@
 import dspy
+from dspy import BootstrapFewShot
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -136,16 +137,12 @@ examples = [
 class TestCaseGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.generate = dspy.Predict(UserStoryToTestCase)
-        self.train(examples)
+        self.signature = UserStoryToTestCase
+        base_predictor = dspy.Predict(self.signature)
+        optimizer = BootstrapFewShot(metric=lambda example, pred: True)
+        self.generate = optimizer.compile(base_predictor, trainset=examples)
 
     def forward(self, user_story):
-        """Generate test cases using few-shot learning"""
         logger.info("Generating test cases for user story")
         prediction = self.generate(user_story=user_story)
         return prediction.test_cases
-
-    def train(self, examples):
-        """Train the model with few-shot examples"""
-        logger.info("Prompt enhanced with few-shot examples")
-        self.generate.examples = examples
