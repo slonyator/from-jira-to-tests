@@ -72,3 +72,18 @@ async def process_input(input_data: str) -> str:
     except Exception as e:
         logger.error(f"Error processing input: {str(e)}")
         raise
+
+
+def read_file(file_path: str) -> str:
+    """Read content from a file"""
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError as err:
+        logger.error(f"File not found: {file_path}")
+        raise FileNotFoundError(
+            f"The file '{file_path}' was not found"
+        ) from err
+    except Exception as e:
+        logger.error(f"Error reading file {file_path}: {str(e)}")
+        raise OSError(f"Failed to read file '{file_path}': {str(e)}") from e
