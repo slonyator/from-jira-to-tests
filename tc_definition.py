@@ -1,3 +1,4 @@
+import dspy
 from pydantic import BaseModel, Field
 
 
@@ -14,3 +15,21 @@ class TestCase(BaseModel):
 class TestSuite(BaseModel):
     title: str = Field(..., description="Test suite title")
     test_cases: list[TestCase] = Field(default_factory=list)
+
+
+class UserStoryToTestCase(dspy.Signature):
+    """Convert a user story into detailed functional test cases"""
+
+    user_story = dspy.InputField(desc="User story text")
+    test_cases = dspy.OutputField(
+        desc="List of detailed test cases in markdown format"
+    )
+
+
+class TestCaseGenerator(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.generate = dspy.Predict(UserStoryToTestCase)
+
+    def forward(self, user_story):
+        return self.generate(user_story=user_story)
