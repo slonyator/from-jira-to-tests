@@ -40,3 +40,35 @@ async def generate_test_cases(user_story: str) -> str:
         raise TestCaseGenerationError(
             f"Failed to generate test cases: {str(e)}"
         ) from e
+
+
+def format_markdown_output(test_cases: str) -> str:
+    """Format the output in proper Markdown"""
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    header = f"""# Test Suite: Token Access & Management
+*Generated on: {current_date}*
+
+"""
+    return header + test_cases
+
+
+async def process_input(input_data: str) -> str:
+    """Process input and generate test cases"""
+    try:
+        logger.info("Validating input data")
+        if not input_data.strip():
+            raise ValueError("Input cannot be empty")
+
+        logger.info("Processing user story input")
+
+        logger.info("Generating test cases")
+        test_cases = await generate_test_cases(input_data)
+
+        logger.info("Formatting output")
+        formatted_output = format_markdown_output(test_cases)
+
+        return formatted_output
+
+    except Exception as e:
+        logger.error(f"Error processing input: {str(e)}")
+        raise
