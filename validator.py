@@ -1,35 +1,57 @@
+import os
 import instructor
-from instructor import llm_validator
+from dotenv import load_dotenv
 from openai import OpenAI
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, AfterValidator
 from typing import Annotated
-from pydantic.functional_validators import AfterValidator
 
-client = instructor.from_openai(OpenAI())
+load_dotenv()
+
+client = instructor.from_openai(OpenAI(api_key=os.environ["OPENAI_API_KEY"]))
+
+
+class Validation(BaseModel):
+    is_valid: bool = Field(
+        ..., description="Whether the value is valid based on the rules"
+    )
+    error_message: str | None = Field(
+        None, description="The error message if the value is not valid"
+    )
+
+
+statement = "Ensure the user story is complete with user role, goal, and benefit; has no contradictions; is clear, precise, and unambiguous."
+
+
+def validator(v):
+    resp = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a validator. Determine if the value is valid for the statement. If it is not, explain why.",
+            },
+            {
+                "role": "user",
+                "content": f"Does `{v}` follow the rules: {statement}",
+            },
+        ],
+        response_model=Validation,
+    )
+    if not resp.is_valid:
+        raise ValueError(
+            resp.error_message or "No specific error message provided."
+        )
+    return v
+
 
 class UserStory(BaseModel):
-    story: Annotated[
-        str,
-        AfterValidator(
-            llm_validator(
-                client=client,
-                "Ensure the user story is complete with user role, goal, and benefit; has no contradictions; is clear, precise, and unambiguous."
-            )
-        ),
-    ]
+    story: Annotated[str, AfterValidator(validator)]
+
 
 if __name__ == "__main__":
-    test_stories = [
-        "As a bank customer, I want to withdraw cash from an ATM using my debit card so that I can access my money without visiting a branch.",
-    ]
-
-    for i, story in enumerate(test_stories):
-        print(f"Testing story {i+1}:")
-        try:
-            validated_story = UserStory(story=story)
-            print("  - Valid")
-        except ValidationError as e:
-            print("  - Invalid")
-            for error in e.errors():
-                print(f"    - {error['msg']}")
-        print()
+    input_story = "As a bank customer, I want to withdraw cash from an ATM using my debit card so that I can access my money without visiting a branch."
+    try:
+        validated_story = UserStory(story=input_story)
+        print("User story is valid.")
+    except ValueError as e:
+        print("User story is invalid:", e)
