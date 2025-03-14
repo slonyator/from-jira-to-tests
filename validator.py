@@ -80,20 +80,3 @@ class UserStoryValidator(Module):
 
         logger.info("User story is valid")
         return Prediction(is_valid=True, error_message=None)
-
-
-if __name__ == "__main__":
-    validator = UserStoryValidator()
-
-    test_stories = [
-        "As a bank customer, I want to withdraw cash from an ATM using my debit card so that I can access my money without visiting a branch.",
-    ]
-
-    for i, input_story in enumerate(test_stories):
-        print(f"Testing story {i + 1}: {input_story}")
-        result = validator(story=input_story)
-        if result.is_valid:
-            print("  - Valid")
-        else:
-            print("  - Invalid:", result.error_message)
-        print()
