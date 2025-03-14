@@ -89,9 +89,9 @@ class TestCaseGenerator(dspy.Module):
             test_suite_dict = json.loads(test_suite_json)
             test_suite = TestSuite(**test_suite_dict)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse test suite JSON: {e}")
+            raise ValueError(f"Failed to parse test suite JSON: {e}") from e
         except Exception as e:
-            raise ValueError(f"Failed to create TestSuite: {e}")
+            raise ValueError(f"Failed to create TestSuite: {e}") from e
         return test_suite
 
 
