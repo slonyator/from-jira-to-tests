@@ -1,112 +1,99 @@
 import os
-import instructor
 from dotenv import load_dotenv
-from openai import OpenAI
-from pydantic import BaseModel, Field, AfterValidator
-from typing import Annotated
+import dspy
+from dspy import Signature, Module, InputField, OutputField, Prediction
+from loguru import logger
 
 load_dotenv()
 
-client = instructor.from_openai(OpenAI(api_key=os.environ["OPENAI_API_KEY"]))
+lm = dspy.LM("openai/gpt-3.5-turbo", api_key=os.environ["OPENAI_API_KEY"])
+dspy.settings.configure(lm=lm)
 
 
-class Validation(BaseModel):
-    is_valid: bool = Field(
-        ..., description="Whether the value is valid based on the rules"
+class AmbiguitySignature(Signature):
+    """Determine if the user story is clear, precise, and unambiguous."""
+
+    story = InputField(desc="The user story to validate")
+    is_valid = OutputField(
+        desc="Whether the story is unambiguous (true/false)"
     )
-    error_message: str | None = Field(
-        None, description="The error message if the value is not valid"
+    error_message = OutputField(
+        desc="Explanation if the story is ambiguous", default=None
     )
 
 
-ambiguity_statement = "Ensure the user story is clear, precise, and unambiguous, with no room for multiple interpretations."
-completeness_statement = (
-    "Ensure the user story is complete with a user role, goal, and benefit."
-)
-contradiction_statement = (
-    "Ensure the user story has no contradictions in its requirements."
-)
+class CompletenessSignature(Signature):
+    """Determine if the user story is complete with user role, goal, and benefit."""
 
-
-def ambiguity_validator(v):
-    resp = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a validator. Determine if the value is valid for the statement. If it is not, explain why.",
-            },
-            {
-                "role": "user",
-                "content": f"Does `{v}` follow the rules: {ambiguity_statement}",
-            },
-        ],
-        response_model=Validation,
+    story = InputField(desc="The user story to validate")
+    is_valid = OutputField(desc="Whether the story is complete (true/false)")
+    error_message = OutputField(
+        desc="Explanation if the story is incomplete", default=None
     )
-    if not resp.is_valid:
-        raise ValueError(
-            f"Ambiguity issue: {resp.error_message or 'No specific error message provided.'}"
-        )
-    return v
 
 
-def completeness_validator(v):
-    resp = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a validator. Determine if the value is valid for the statement. If it is not, explain why.",
-            },
-            {
-                "role": "user",
-                "content": f"Does `{v}` follow the rules: {completeness_statement}",
-            },
-        ],
-        response_model=Validation,
+class ContradictionSignature(Signature):
+    """Determine if the user story has no contradictions in its requirements."""
+
+    story = InputField(desc="The user story to validate")
+    is_valid = OutputField(
+        desc="Whether the story is free of contradictions (true/false)"
     )
-    if not resp.is_valid:
-        raise ValueError(
-            f"Completeness issue: {resp.error_message or 'No specific error message provided.'}"
-        )
-    return v
-
-
-def contradiction_validator(v):
-    resp = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a validator. Determine if the value is valid for the statement. If it is not, explain why.",
-            },
-            {
-                "role": "user",
-                "content": f"Does `{v}` follow the rules: {contradiction_statement}",
-            },
-        ],
-        response_model=Validation,
+    error_message = OutputField(
+        desc="Explanation if the story has contradictions", default=None
     )
-    if not resp.is_valid:
-        raise ValueError(
-            f"Contradiction issue: {resp.error_message or 'No specific error message provided.'}"
-        )
-    return v
 
 
-class UserStory(BaseModel):
-    story: Annotated[
-        str,
-        AfterValidator(ambiguity_validator),
-        AfterValidator(completeness_validator),
-        AfterValidator(contradiction_validator),
-    ]
+class UserStoryValidator(Module):
+    """Validate a user story for ambiguity, completeness, and contradictions."""
+
+    def __init__(self):
+        super().__init__()
+        self.check_ambiguity = dspy.Predict(AmbiguitySignature)
+        self.check_completeness = dspy.Predict(CompletenessSignature)
+        self.check_contradictions = dspy.Predict(ContradictionSignature)
+
+    def forward(self, story):
+        logger.info("Check for ambiguity")
+        ambiguity_result = self.check_ambiguity(story=story)
+        if not ambiguity_result.is_valid:
+            return Prediction(
+                is_valid=False,
+                error_message=f"Ambiguity issue: {ambiguity_result.error_message}",
+            )
+
+        logger.info("Check for completeness")
+        completeness_result = self.check_completeness(story=story)
+        if not completeness_result.is_valid:
+            return Prediction(
+                is_valid=False,
+                error_message=f"Completeness issue: {completeness_result.error_message}",
+            )
+
+        logger.info("Check for contradictions")
+        contradiction_result = self.check_contradictions(story=story)
+        if not contradiction_result.is_valid:
+            return Prediction(
+                is_valid=False,
+                error_message=f"Contradiction issue: {contradiction_result.error_message}",
+            )
+
+        logger.info("User story is valid")
+        return Prediction(is_valid=True, error_message=None)
 
 
 if __name__ == "__main__":
-    input_story = "As a bank customer, I want to withdraw cash from an ATM using my debit card so that I can access my money without visiting a branch."
-    try:
-        validated_story = UserStory(story=input_story)
-        print("User story is valid.")
-    except ValueError as e:
-        print("User story is invalid:", e)
+    validator = UserStoryValidator()
+
+    test_stories = [
+        "As a bank customer, I want to withdraw cash from an ATM using my debit card so that I can access my money without visiting a branch.",
+    ]
+
+    for i, input_story in enumerate(test_stories):
+        print(f"Testing story {i + 1}: {input_story}")
+        result = validator(story=input_story)
+        if result.is_valid:
+            print("  - Valid")
+        else:
+            print("  - Invalid:", result.error_message)
+        print()
