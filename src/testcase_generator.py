@@ -1,7 +1,7 @@
 import json
-
 import dspy
 from pydantic import BaseModel, Field
+from dspy import Example, LabeledFewShot
 
 
 class TestCase(BaseModel):
@@ -20,7 +20,7 @@ class TestSuite(BaseModel):
 
 
 class UserStoryToTestSuite(dspy.Signature):
-    """Convert a user story into a test suite with detailed functional test cases covering all requirements, including UI interactions and backend behaviors where applicable. Output should be a JSON object representing the TestSuite."""
+    """Convert a user story into a test suite with detailed functional test cases covering all requirements."""
 
     user_story = dspy.InputField(desc="User story text")
     test_suite = dspy.OutputField(
@@ -28,7 +28,7 @@ class UserStoryToTestSuite(dspy.Signature):
     )
 
 
-# Define a few-shot example
+# Define your example user story and test suite
 example_user_story = (
     "As a user, I want to create a new account so that I can log in later.\n"
     "## Account Creation\n"
@@ -59,28 +59,31 @@ example_test_suite = TestSuite(
     title="Account Creation Test Suite", test_cases=[example_test_case]
 )
 
-# Convert to a JSON-serializable dictionary
-example_dict = {
-    "user_story": example_user_story,
-    "test_suite": example_test_suite.json(),  # Assuming TestSuite has a .json() method
-}
+# Define trainset
+trainset = [
+    Example(
+        user_story=example_user_story, test_suite=example_test_suite.json()
+    )
+]
 
 
 class TestCaseGenerator(dspy.Module):
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(UserStoryToTestSuite)
+        trainset = [
+            dspy.Example(
+                user_story=example_user_story,
+                test_suite=example_test_suite.model_dump_json(),
+            )
+        ]
+        teleprompter = LabeledFewShot()
+        self.generate = teleprompter.compile(
+            student=self.generate, trainset=trainset
+        )
 
     def forward(self, user_story):
-        prompt = (
-            f"Below is an example of converting a user story to a test suite:\n\n"
-            f"User Story:\n{example_dict['user_story']}\n\n"
-            f"Test Suite:\n{example_dict['test_suite']}\n\n"
-            f"Now, convert the following user story to a test suite in the same format:\n\n"
-            f"User Story:\n{user_story}\n\n"
-            f"Test Suite:"
-        )
-        prediction = self.generate(user_story=prompt)
+        prediction = self.generate(user_story=user_story)
         try:
             test_suite_json = prediction.test_suite
             test_suite_dict = json.loads(test_suite_json)
