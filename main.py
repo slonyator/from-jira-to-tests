@@ -8,8 +8,8 @@ import dspy
 from dotenv import load_dotenv
 from loguru import logger
 
-from validator import UserStoryValidator
-from testcase_generator import TestCaseGenerator
+from src.validator import UserStoryValidator
+from src.testcase_generator import TestCaseGenerator
 
 
 class TestCaseGeneratorApp:
