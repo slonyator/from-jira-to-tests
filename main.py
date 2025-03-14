@@ -136,11 +136,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    # Create app instance with default or custom models
-    app = (
-        TestCaseGeneratorApp()
-    )  # Defaults to gpt-3.5-turbo for validator, gpt-4o-mini for generator
-    # Example with custom models: app = TestCaseGeneratorApp(validator_model="openai/gpt-4", generator_model="openai/gpt-4o")
+    app = TestCaseGeneratorApp()
 
     try:
         await app.run(file_path=args.file, output_path=args.output)
