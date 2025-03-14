@@ -49,9 +49,9 @@ class UserStoryValidator(Module):
 
     def __init__(self):
         super().__init__()
-        self.check_ambiguity = dspy.Predict(AmbiguitySignature)
-        self.check_completeness = dspy.Predict(CompletenessSignature)
-        self.check_contradictions = dspy.Predict(ContradictionSignature)
+        self.check_ambiguity = dspy.ChainOfThought(AmbiguitySignature)
+        self.check_completeness = dspy.ChainOfThought(CompletenessSignature)
+        self.check_contradictions = dspy.ChainOfThought(ContradictionSignature)
 
     def forward(self, story):
         logger.info("Check for ambiguity")
