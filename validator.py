@@ -1,13 +1,6 @@
-import os
-from dotenv import load_dotenv
 import dspy
 from dspy import Signature, Module, InputField, OutputField, Prediction
 from loguru import logger
-
-load_dotenv()
-
-lm = dspy.LM("openai/gpt-3.5-turbo", api_key=os.environ["OPENAI_API_KEY"])
-dspy.settings.configure(lm=lm)
 
 
 class AmbiguitySignature(Signature):
