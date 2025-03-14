@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from tc_definition import TestCaseGenerator
+from validator import UserStoryValidator
 
 
 class TestCaseGenerationError(Exception):
@@ -62,6 +63,11 @@ async def process_input(input_data: str) -> str:
         logger.info("Validating input data")
         if not input_data.strip():
             raise ValueError("Input cannot be empty")
+
+        validator = UserStoryValidator()
+        result = validator(story=input_data)
+        if not result.is_valid:
+            return result.error_message
 
         logger.info("Processing user story input")
 
