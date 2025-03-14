@@ -19,10 +19,16 @@ class Validation(BaseModel):
     )
 
 
-statement = "Ensure the user story is complete with user role, goal, and benefit; has no contradictions; is clear, precise, and unambiguous."
+ambiguity_statement = "Ensure the user story is clear, precise, and unambiguous, with no room for multiple interpretations."
+completeness_statement = (
+    "Ensure the user story is complete with a user role, goal, and benefit."
+)
+contradiction_statement = (
+    "Ensure the user story has no contradictions in its requirements."
+)
 
 
-def validator(v):
+def ambiguity_validator(v):
     resp = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -32,20 +38,69 @@ def validator(v):
             },
             {
                 "role": "user",
-                "content": f"Does `{v}` follow the rules: {statement}",
+                "content": f"Does `{v}` follow the rules: {ambiguity_statement}",
             },
         ],
         response_model=Validation,
     )
     if not resp.is_valid:
         raise ValueError(
-            resp.error_message or "No specific error message provided."
+            f"Ambiguity issue: {resp.error_message or 'No specific error message provided.'}"
+        )
+    return v
+
+
+def completeness_validator(v):
+    resp = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a validator. Determine if the value is valid for the statement. If it is not, explain why.",
+            },
+            {
+                "role": "user",
+                "content": f"Does `{v}` follow the rules: {completeness_statement}",
+            },
+        ],
+        response_model=Validation,
+    )
+    if not resp.is_valid:
+        raise ValueError(
+            f"Completeness issue: {resp.error_message or 'No specific error message provided.'}"
+        )
+    return v
+
+
+def contradiction_validator(v):
+    resp = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a validator. Determine if the value is valid for the statement. If it is not, explain why.",
+            },
+            {
+                "role": "user",
+                "content": f"Does `{v}` follow the rules: {contradiction_statement}",
+            },
+        ],
+        response_model=Validation,
+    )
+    if not resp.is_valid:
+        raise ValueError(
+            f"Contradiction issue: {resp.error_message or 'No specific error message provided.'}"
         )
     return v
 
 
 class UserStory(BaseModel):
-    story: Annotated[str, AfterValidator(validator)]
+    story: Annotated[
+        str,
+        AfterValidator(ambiguity_validator),
+        AfterValidator(completeness_validator),
+        AfterValidator(contradiction_validator),
+    ]
 
 
 if __name__ == "__main__":
