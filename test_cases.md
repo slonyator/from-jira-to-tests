@@ -11,21 +11,21 @@
 1. Navigate to the token management page
 2. Click on 'Create New Token' button
 #### Expected Results
-- New non-legacy token is created
+- New non-legacy token is created successfully
 - Token is displayed in the token list
 - 'Create New Token' button is disabled
 
 ### Test Case TC-002
-**Module:** Token Access Control
+**Module:** Token Access
 **Priority:** High
 **Type:** Functional
 #### Prerequisites
 - User has created a non-legacy token
 #### Test Steps
-1. Use the token to access applications
+1. Use the created token to access applications
 #### Expected Results
-- Access is limited to the groups of the creator at the time of using the token
-- Group 'Everyone' is always included
+- Token only accesses applications available to the creator
+- Group 'Everyone' is included in access
 - Group 'Unassigned Users' is included if applicable
 
 ### Test Case TC-003
@@ -33,26 +33,24 @@
 **Priority:** High
 **Type:** Functional
 #### Prerequisites
-- User has created a non-legacy token
+- User has a non-legacy token
 - User is deactivated
 #### Test Steps
-1. Attempt to use the non-legacy token
+1. Deactivate the user account
 #### Expected Results
-- Token is automatically deactivated
-- User cannot access applications using the token
+- Non-legacy token is automatically deactivated
 
 ### Test Case TC-004
 **Module:** Token Deletion
 **Priority:** High
 **Type:** Functional
 #### Prerequisites
-- User has created a non-legacy token
+- User has a non-legacy token
 - User is deleted from the account
 #### Test Steps
-1. Attempt to use the non-legacy token
+1. Delete the user account
 #### Expected Results
-- Token is automatically deleted
-- User cannot access applications using the token
+- Non-legacy token is automatically deleted
 
 ### Test Case TC-005
 **Module:** Legacy Token Visibility
@@ -60,6 +58,7 @@
 **Type:** Functional
 #### Prerequisites
 - User is a regular or limited user
+- User has created legacy tokens
 #### Test Steps
 1. Navigate to the token management page
 #### Expected Results
@@ -75,30 +74,19 @@
 1. Navigate to the token management page
 #### Expected Results
 - Admin can view all legacy tokens
-- Admin can delete any legacy token
+- Admin can delete legacy tokens
 - Admin cannot copy/download/refresh legacy tokens
 
 ### Test Case TC-007
-**Module:** Token Tooltip Verification
-**Priority:** Medium
-**Type:** Functional
-#### Prerequisites
-- User has created a non-legacy token
-#### Test Steps
-1. Hover over the token access level column
-#### Expected Results
-- Tooltip appears: 'Token inherits access permissions from the creator'
-
-### Test Case TC-008
-**Module:** Legacy Token Access Level
+**Module:** Legacy Token Access
 **Priority:** Medium
 **Type:** Functional
 #### Prerequisites
 - User is an Admin or DevOps
+- Legacy tokens exist
 #### Test Steps
-1. Navigate to the token management page
-2. Check the access level of legacy tokens
+1. Check access level of legacy tokens
 #### Expected Results
-- Legacy tokens show 'Global Access' in the access level column
-- Tooltip appears: 'Token has access to all apps'
+- Legacy tokens have Global Access
+- Tooltip indicates 'Token has access to all apps'
 
