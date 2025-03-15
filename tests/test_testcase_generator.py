@@ -74,9 +74,7 @@ class TestTestSuite:
     def test_testsuite_missing_title(self):
         """Test that ValidationError is raised when title is missing."""
         with pytest.raises(ValidationError):
-            TestSuite(
-                test_cases=[]
-            )
+            TestSuite(test_cases=[])
 
     def test_testsuite_default_test_cases(self):
         """Test that test_cases defaults to an empty list."""
