@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -37,7 +39,6 @@ class TestTestCase:
                 priority="High",
                 type="Functional",
                 steps=["Step 1", "Step 2"],
-                # missing expected_results
             )
 
     def test_testcase_default_prerequisites(self):
@@ -75,7 +76,6 @@ class TestTestSuite:
         with pytest.raises(ValidationError):
             TestSuite(
                 test_cases=[]
-                # missing title
             )
 
     def test_testsuite_default_test_cases(self):
@@ -89,29 +89,52 @@ class TestTestCaseGenerator:
     def test_forward_success(self, mocker):
         """Test the forward method with a valid user story, mocking dspy.Predict."""
         generator = TestCaseGenerator()
+
+        test_suite_data = {
+            "title": "Mocked Suite",
+            "test_cases": [
+                {
+                    "id": "TC-MOCK",
+                    "module": "Mock",
+                    "priority": "High",
+                    "type": "Functional",
+                    "prerequisites": [],
+                    "steps": ["Step 1"],
+                    "expected_results": ["Expected 1"],
+                }
+            ],
+        }
+        test_suite_json = json.dumps(test_suite_data)
         mock_generate = mocker.patch.object(
             generator.generate,
             "forward",
-            return_value=Prediction(test_cases="Mocked test cases"),
+            return_value=Prediction(test_suite=test_suite_json),
         )
 
         user_story = "As a user, I want to log in."
         result = generator.forward(user_story)
 
-        assert result.test_cases == "Mocked test cases"
+        assert result.title == "Mocked Suite"
+        assert result.test_cases[0].id == "TC-MOCK"
         mock_generate.assert_called_once_with(user_story=user_story)
 
     def test_forward_with_empty_story(self, mocker):
         """Test the forward method with an empty user story, mocking dspy.Predict."""
         generator = TestCaseGenerator()
+        test_suite_data = {
+            "title": "Empty Suite",
+            "test_cases": [],
+        }
+        test_suite_json = json.dumps(test_suite_data)
         mock_generate = mocker.patch.object(
             generator.generate,
             "forward",
-            return_value=Prediction(test_cases=""),
+            return_value=Prediction(test_suite=test_suite_json),
         )
 
         user_story = ""
         result = generator.forward(user_story)
 
-        assert result.test_cases == ""
+        assert result.title == "Empty Suite"
+        assert result.test_cases == []
         mock_generate.assert_called_once_with(user_story=user_story)
