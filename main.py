@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from src.validator import UserStoryValidator
-from src.testcase_generator import TestCaseGenerator
+from src.testcase_generator import TestCaseGenerator, TestSuite
 
 
 class TestCaseGeneratorApp:
@@ -34,20 +34,17 @@ class TestCaseGeneratorApp:
             api_key=os.environ["OPENAI_API_KEY"],
         )
 
-    async def generate_test_cases(self, user_story: str) -> str:
-        """Generate test cases using the generator language model."""
+    def generate_test_cases(self, user_story: str) -> TestSuite:
         logger.info("Starting test case generation")
         start_time = datetime.now()
-
         dspy.settings.configure(lm=self.lm_generator)
         generator = TestCaseGenerator()
-        prediction = generator(user_story=user_story)
-
+        test_suite = generator(user_story=user_story)
         execution_time = (datetime.now() - start_time).total_seconds()
         logger.info(
-            f"Test cases generated successfully in {execution_time} seconds"
+            f"Test suite generated successfully in {execution_time} seconds"
         )
-        return prediction.test_cases
+        return test_suite
 
     def format_markdown_output(self, test_cases: str) -> str:
         """Format the output in proper Markdown."""
@@ -59,7 +56,6 @@ class TestCaseGeneratorApp:
         return header + test_cases
 
     async def process_input(self, input_data: str) -> str:
-        """Process input and generate test cases."""
         if not input_data.strip():
             raise ValueError("Input cannot be empty")
 
@@ -70,11 +66,12 @@ class TestCaseGeneratorApp:
         if not result.is_valid:
             return result.error_message
 
-        logger.info("Generating test cases")
-        test_cases = await self.generate_test_cases(input_data)
-
+        logger.info("Generating test suite")
+        test_suite = self.generate_test_cases(input_data)
         logger.info("Formatting output")
-        formatted_output = self.format_markdown_output(test_cases)
+        from src.testcase_generator import format_test_suite_to_markdown
+
+        formatted_output = format_test_suite_to_markdown(test_suite)
         return formatted_output
 
     def read_file(self, file_path: str) -> str:
@@ -139,11 +136,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    # Create app instance with default or custom models
-    app = (
-        TestCaseGeneratorApp()
-    )  # Defaults to gpt-3.5-turbo for validator, gpt-4o-mini for generator
-    # Example with custom models: app = TestCaseGeneratorApp(validator_model="openai/gpt-4", generator_model="openai/gpt-4o")
+    app = TestCaseGeneratorApp()
 
     try:
         await app.run(file_path=args.file, output_path=args.output)
