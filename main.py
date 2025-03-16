@@ -45,7 +45,8 @@ class TestCaseGeneratorApp:
         )
         self.output_formatter = OutputFormatter()
 
-    def get_test_key(self, test_case):
+    @staticmethod
+    def get_test_key(test_case):
         """Create a unique key based on steps and expected results."""
         steps_str = "|".join(test_case.steps)
         expected_str = "|".join(test_case.expected_results)
@@ -218,7 +219,8 @@ class TestCaseGeneratorApp:
             logger.error(f"Error in run: {str(e)}")
             raise
 
-    def read_file(self, file_path: str) -> str:
+    @staticmethod
+    def read_file(file_path: str) -> str:
         """Read content from a file."""
         try:
             with open(file_path, encoding="utf-8") as f:
