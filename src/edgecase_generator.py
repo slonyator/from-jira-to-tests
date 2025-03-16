@@ -5,7 +5,6 @@ from loguru import logger
 from pydantic import BaseModel, Field
 import dspy
 
-
 # Pydantic Models
 class TestCase(BaseModel):
     id: str = Field(..., description="Unique test case identifier")
@@ -17,39 +16,26 @@ class TestCase(BaseModel):
     steps: list[str] = Field(..., description="Detailed test steps")
     expected_results: list[str] = Field(..., description="Expected outcomes")
 
-
 class TestSuite(BaseModel):
     title: str = Field(..., description="Test suite title")
     test_cases: list[TestCase] = Field(default_factory=list)
-
 
 class EdgeCasePrediction(BaseModel):
     needs_edge_cases: bool
     reason: str
 
-
 # DSPy Signatures
 class UserStoryToEdgeCasePrediction(dspy.Signature):
     """Determine if edge cases are necessary based on the user story. Consider scenarios like network issues, concurrent requests, or other potential edge cases that might not be explicitly mentioned but could impact reliability or performance."""
-
     user_story = dspy.InputField(desc="User story text")
-    prediction = dspy.OutputField(
-        desc="Prediction in JSON format with 'needs_edge_cases' (boolean) and 'reason' (string)"
-    )
-
+    prediction = dspy.OutputField(desc="Prediction in JSON format with 'needs_edge_cases' (boolean) and 'reason' (string)")
 
 class UserStoryToEdgeCases(dspy.Signature):
-    """Generate edge case test cases based on the user story, the reason for needing edge cases, and the existing test suite. Ensure no duplicate test cases."""
-
+    """Generate edge case test cases based on the user story, the reason for needing edge cases, and the existing test suite. Ensure no duplicate test cases. The output must be a JSON object with an 'edge_cases' key containing a list of test case objects, each with the following fields: 'id', 'title', 'module', 'priority', 'type', 'prerequisites', 'steps', 'expected_results'. Example: {"edge_cases": [{"id": "EDGE-001", "title": "Network Failure During Token Creation", "module": "Token Management", "priority": "Medium", "type": "Error Handling", "prerequisites": ["Network throttling"], "steps": ["Create token during network delay"], "expected_results": ["Error handled gracefully"]}]}"""
     user_story = dspy.InputField(desc="User story text")
     reason = dspy.InputField(desc="Reason for needing edge cases")
-    existing_test_suite = dspy.InputField(
-        desc="Existing test suite in JSON format"
-    )
-    edge_cases = dspy.OutputField(
-        desc="List of edge case test cases in JSON format"
-    )
-
+    existing_test_suite = dspy.InputField(desc="Existing test suite in JSON format")
+    edge_cases = dspy.OutputField(desc="JSON object with 'edge_cases' key containing a list of edge case test cases")
 
 # DSPy Modules
 class EdgeCasePredictor(dspy.Module):
@@ -66,49 +52,28 @@ class EdgeCasePredictor(dspy.Module):
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse prediction JSON: {e}")
 
-
 class EdgeCaseGeneratorModule(dspy.Module):
     def __init__(self):
         super().__init__()
         self.generate = dspy.Predict(UserStoryToEdgeCases)
 
-    def forward(
-        self, user_story: str, reason: str, existing_test_suite: str
-    ) -> list:
+    def forward(self, user_story: str, reason: str, existing_test_suite: str) -> list:
         """Generate edge cases based on the inputs."""
-        prediction = self.generate(
-            user_story=user_story,
-            reason=reason,
-            existing_test_suite=existing_test_suite,
-        )
+        prediction = self.generate(user_story=user_story, reason=reason, existing_test_suite=existing_test_suite)
         logger.debug(f"Raw edge cases prediction: {prediction.edge_cases}")
         try:
-            # Parse the JSON string into a Python object
             parsed_data = json.loads(prediction.edge_cases)
-
-            # Check if the "edge_cases" key exists
             if "edge_cases" not in parsed_data:
                 raise ValueError("Missing 'edge_cases' key in prediction")
-
-            # Extract the list from the "edge_cases" key
             edge_cases_list = parsed_data["edge_cases"]
-
-            # Validate that it's a list
             if not isinstance(edge_cases_list, list):
                 raise ValueError("Edge cases must be a JSON list")
-
-            # Optional: Validate that each item is a dictionary
             for edge_case in edge_cases_list:
-                if not isinstance(edge_case, dict):
-                    raise ValueError(
-                        "Each edge case must be a JSON object (dictionary)"
-                    )
-
-            # Return the list of edge cases
+                if not isinstance(edge_case, dict) or 'title' not in edge_case:
+                    raise ValueError("Each edge case must be a JSON object with a 'title' field")
             return edge_cases_list
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse edge cases JSON: {e}")
-
 
 # EdgeCaseGenerator Class
 class EdgeCaseGenerator:
@@ -120,9 +85,7 @@ class EdgeCaseGenerator:
     def needs_edge_cases(self, user_story: str) -> EdgeCasePrediction:
         """Determine if edge cases are needed."""
         prediction = self.predictor.forward(user_story)
-        logger.info(
-            f"Edge case prediction: {prediction.needs_edge_cases}, Reason: {prediction.reason}"
-        )
+        logger.info(f"Edge case prediction: {prediction.needs_edge_cases}, Reason: {prediction.reason}")
         return prediction
 
     def forward(self, user_story: str, test_suite: TestSuite) -> TestSuite:
@@ -132,10 +95,7 @@ class EdgeCaseGenerator:
             logger.info("No edge cases needed for this user story.")
             return test_suite
 
-        # Convert existing test suite to JSON for the generator
         existing_suite_json = test_suite.model_dump_json()
-
-        # Generate edge cases based on user story, reason, and existing suite
         logger.info("Generating edge cases...")
         edge_cases_list = self.generator.forward(
             user_story=user_story,
@@ -143,7 +103,6 @@ class EdgeCaseGenerator:
             existing_test_suite=existing_suite_json,
         )
 
-        # Add generated edge cases to the test suite, avoiding duplicates
         existing_ids = {tc.id for tc in test_suite.test_cases}
         new_edge_cases = []
         for edge_case_dict in edge_cases_list:
@@ -156,7 +115,6 @@ class EdgeCaseGenerator:
         logger.info(f"Generated and added {len(new_edge_cases)} edge cases")
         return test_suite
 
-
 # Utility Function
 def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
     """Format the test suite into a Markdown string."""
@@ -164,7 +122,7 @@ def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
         return "## No Test Cases Generated\n"
     markdown = f"## {test_suite.title}\n\n"
     for tc in test_suite.test_cases:
-        markdown += f"### Test Case {tc.id}\n"
+        markdown += f"### Test Case {tc.id}: {tc.title}\n"
         markdown += f"**Module:** {tc.module}\n"
         markdown += f"**Priority:** {tc.priority}\n"
         markdown += f"**Type:** {tc.type}\n"
@@ -181,11 +139,9 @@ def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
         markdown += "\n"
     return markdown
 
-
 # Main Function
 def main():
     """Main execution function to generate and output the extended test suite."""
-    # Load environment variables
     load_dotenv()
     generator_model = "openai/gpt-4o-mini"
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -193,16 +149,9 @@ def main():
         logger.error("OPENAI_API_KEY environment variable not set.")
         raise ValueError("Please set OPENAI_API_KEY in your environment.")
 
-    # Configure DSPy with the language model
-    lm_generator = dspy.LM(
-        model=generator_model,
-        max_tokens=1000,
-        temperature=0.0,
-        api_key=api_key,
-    )
+    lm_generator = dspy.LM(model=generator_model, max_tokens=1000, temperature=0.0, api_key=api_key)
     dspy.settings.configure(lm=lm_generator)
 
-    # Define user story
     user_story = (
         "# **Extension Tokens**\n\n"
         "## New Extension Tokens have user-based access\n"
@@ -243,7 +192,6 @@ def main():
         "- Legacy tokens will have Global Access (access to all apps, as of today). This will be indicated in the Access Level column. With the tooltip: Token has access to all apps."
     )
 
-    # Define initial test suite
     initial_suite = TestSuite(
         title="Extension Tokens Test Suite",
         test_cases=[
@@ -253,22 +201,9 @@ def main():
                 module="Extension Token Management",
                 priority="High",
                 type="Functional",
-                prerequisites=[
-                    "User is logged into the system",
-                    "User has appropriate permissions",
-                ],
-                steps=[
-                    "Navigate to Extension Token management page",
-                    "Verify 'Create New Token' button state",
-                    "Click 'Create New Token' button",
-                    "Verify token creation",
-                ],
-                expected_results=[
-                    "New token created successfully",
-                    "Token inherits creator's access permissions",
-                    "Access Level column shows 'Creator Access' with correct tooltip",
-                    "Only one non-legacy token allowed per user",
-                ],
+                prerequisites=["User is logged into the system", "User has appropriate permissions"],
+                steps=["Navigate to Extension Token management page", "Verify 'Create New Token' button state", "Click 'Create New Token' button", "Verify token creation"],
+                expected_results=["New token created successfully", "Token inherits creator's access permissions", "Access Level column shows 'Creator Access' with correct tooltip", "Only one non-legacy token allowed per user"]
             ),
             TestCase(
                 id="EXT-002",
@@ -276,20 +211,9 @@ def main():
                 module="Extension Token Management",
                 priority="High",
                 type="Functional",
-                prerequisites=[
-                    "System has existing legacy tokens",
-                    "Users of different permission levels exist",
-                ],
-                steps=[
-                    "Log in as regular/limited user",
-                    "Log in as Admin/DevOps user",
-                    "Verify legacy token management options",
-                ],
-                expected_results=[
-                    "Regular users cannot see legacy tokens",
-                    "Admin/DevOps can see and manage all legacy tokens",
-                    "Legacy tokens show 'Global Access' in Access Level column",
-                ],
+                prerequisites=["System has existing legacy tokens", "Users of different permission levels exist"],
+                steps=["Log in as regular/limited user", "Log in as Admin/DevOps user", "Verify legacy token management options"],
+                expected_results=["Regular users cannot see legacy tokens", "Admin/DevOps can see and manage all legacy tokens", "Legacy tokens show 'Global Access' in Access Level column"]
             ),
             TestCase(
                 id="EXT-003",
@@ -297,38 +221,24 @@ def main():
                 module="Extension Token Management",
                 priority="High",
                 type="Functional",
-                steps=[
-                    "Deactivate a token creator's account",
-                    "Delete a token creator's account",
-                    "Verify legacy tokens remain unchanged",
-                ],
-                expected_results=[
-                    "Appropriate token deactivation/deletion based on creator account status",
-                    "Legacy tokens maintain functionality",
-                    "System logs reflect changes",
-                ],
-            ),
-        ],
+                steps=["Deactivate a token creator's account", "Delete a token creator's account", "Verify legacy tokens remain unchanged"],
+                expected_results=["Appropriate token deactivation/deletion based on creator account status", "Legacy tokens maintain functionality", "System logs reflect changes"]
+            )
+        ]
     )
 
-    # Generate edge cases and extend the test suite
     logger.info("Starting edge case generation")
     edge_generator = EdgeCaseGenerator()
-    extended_suite = edge_generator.forward(
-        user_story=user_story, test_suite=initial_suite
-    )
+    extended_suite = edge_generator.forward(user_story=user_story, test_suite=initial_suite)
 
-    # Format and output the extended test suite
     formatted_output = format_test_suite_to_markdown(extended_suite)
     logger.info("Edge case generation completed")
     print(formatted_output)
 
-    # Write to file
     output_path = "extended_test_cases.md"
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(formatted_output)
     logger.info(f"Extended test cases written to {output_path}")
-
 
 if __name__ == "__main__":
     main()
