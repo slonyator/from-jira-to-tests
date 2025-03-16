@@ -9,6 +9,7 @@ import dspy
 # Pydantic Models
 class TestCase(BaseModel):
     id: str = Field(..., description="Unique test case identifier")
+    title: str = Field(..., description="Test case title")
     module: str = Field(..., description="Module being tested")
     priority: str = Field(..., description="Test priority")
     type: str = Field(..., description="Test type")
@@ -248,6 +249,7 @@ def main():
         test_cases=[
             TestCase(
                 id="EXT-001",
+                title="New Extension Token Creation",
                 module="Extension Token Management",
                 priority="High",
                 type="Functional",
@@ -270,6 +272,7 @@ def main():
             ),
             TestCase(
                 id="EXT-002",
+                title="Legacy Token Visibility",
                 module="Extension Token Management",
                 priority="High",
                 type="Functional",
@@ -290,6 +293,7 @@ def main():
             ),
             TestCase(
                 id="EXT-003",
+                title="Token Deactivation",
                 module="Extension Token Management",
                 priority="High",
                 type="Functional",
