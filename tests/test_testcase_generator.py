@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from dspy import Prediction
 
-from src.testcase_generator import TestCase, TestSuite, TestCaseGenerator
+from src.suite_generator import TestCase, TestSuite, TestCaseGenerator
 
 
 class TestTestCase:
