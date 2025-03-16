@@ -1,26 +1,24 @@
 import argparse
 import asyncio
-import sys
-from datetime import datetime
 import os
+import sys
 
 import dspy
 from dotenv import load_dotenv
 from loguru import logger
 
-from src.validator import UserStoryValidator
-from src.suite_generator import (
-    TestCaseGenerator,
-    EdgeCaseGenerator,
-    TestSuite,
-    format_test_suite_to_markdown,
-    trainset,
-    TestCase,
-)
 from src.gap_analyzer import (
     RequirementGapAnalyzer,
     ClarificationTestCaseGenerator,
 )
+from src.suite_generator import (
+    TestCaseGenerator,
+    EdgeCaseGenerator,
+    TestSuite,
+    trainset,
+    TestCase,
+)
+from src.validator import UserStoryValidator
 
 
 class TestCaseGeneratorApp:
@@ -47,9 +45,23 @@ class TestCaseGeneratorApp:
 
     def generate_test_cases(
         self, user_story: str
-    ) -> tuple[TestSuite, list[dict]]:
-        logger.info("Configuring language model for test case generation")
+    ) -> tuple[TestSuite, TestSuite, list[dict]]:
+        """Generate separate test suites and gap analysis with related tests."""
         dspy.settings.configure(lm=self.lm_generator)
+
+        logger.info("Generating functional test cases")
+        test_generator = TestCaseGenerator(trainset=trainset)
+        main_test_suite = test_generator.forward(user_story=user_story)
+        for idx, tc in enumerate(main_test_suite.test_cases, start=1):
+            tc.id = f"TC{idx:03d}"
+
+        logger.info("Generating edge cases")
+        edge_generator = EdgeCaseGenerator()
+        edge_test_suite = edge_generator.forward(
+            user_story=user_story, test_suite=main_test_suite
+        )
+        for idx, tc in enumerate(edge_test_suite.test_cases, start=1):
+            tc.id = f"EC{idx:03d}"
 
         logger.info("Starting requirement gap analysis")
         gap_analyzer = RequirementGapAnalyzer()
@@ -58,17 +70,21 @@ class TestCaseGeneratorApp:
         logger.info("Generating additional test cases for gaps")
         clarification_generator = ClarificationTestCaseGenerator()
         gaps_with_tests = []
-        for i, gap_dict in enumerate(gaps_list or [], start=1):
+        current_id = 1
+        for gap_dict in gaps_list or []:
             description = gap_dict.get("description", "")
             clarification = gap_dict.get("suggested_clarification", "")
             confidence_level = gap_dict.get("confidence_level", "")
-            logger.info(f"Generating test cases for gap {i}: {description}")
+            logger.info(f"Generating test cases for gap: {description}")
             additional_tests_json = clarification_generator.forward(
                 user_story=user_story, clarification=clarification
             )
             additional_tests_pydantic = [
                 TestCase(**tc) for tc in additional_tests_json
             ]
+            for tc in additional_tests_pydantic:
+                tc.id = f"GT{current_id:03d}"
+                current_id += 1
             gaps_with_tests.append(
                 {
                     "gap": {
@@ -80,79 +96,86 @@ class TestCaseGeneratorApp:
                 }
             )
 
-        logger.info("Generating functional test cases")
-        test_generator = TestCaseGenerator(trainset=trainset)
-        mainTestSuite = test_generator.forward(user_story=user_story)
+        return main_test_suite, edge_test_suite, gaps_with_tests
 
-        logger.info("Combining main and additional test cases")
-        combined_test_cases = mainTestSuite.test_cases + [
-            test for item in gaps_with_tests for test in item["tests"]
-        ]
-
-        logger.info("Generating edge cases")
-        edge_generator = EdgeCaseGenerator()
-        extendedSuite = edge_generator.forward(
-            user_story=user_story,
-            test_suite=TestSuite(
-                title="Combined", test_cases=combined_test_cases
-            ),
-        )
-
-        logger.info("Assigning unique IDs")
-        allTests = extendedSuite.test_cases
-        for idx, tc in enumerate(allTests or [], start=1):
-            tc.id = f"TC{idx:03d}"
-
-        finalTestSuite = TestSuite(
-            title="Final Test Suite", test_cases=allTests
-        )
-
-        # Prepare gaps with related test IDs
-        final_gaps_analysis = []
-        for item in gaps_with_tests:
-            related_test_ids = [tc.id for tc in item["tests"]]
-            final_gaps_analysis.append(
-                {"gap": item["gap"], "related_tests": related_test_ids}
-            )
-
-        return finalTestSuite, final_gaps_analysis
-
-    def format_markdown_output(
-        self, finalTestSuite: TestSuite, final_gaps_analysis: list[dict]
-    ) -> tuple[str, str]:
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        header = f"""# Test Suite: Token Access & Management\n*Generated on: {current_date}*\n\n"""
-
-        # Requirements Analysis Section
-        requirements_md = "## Requirements Analysis\n\n"
-        if not final_gaps_analysis:
-            requirements_md += "No gaps identified.\n"
+    def format_test_cases(self, test_cases: list[TestCase], title: str) -> str:
+        """Format a list of test cases into Markdown."""
+        md = f"# {title}\n\n"
+        if not test_cases:
+            md += "No test cases generated.\n"
         else:
-            for i, entry in enumerate(final_gaps_analysis or [], start=1):
-                requirements_md += f"### Gap {i}\n"
-                requirements_md += (
-                    f"- **Description:** {entry['gap']['description']}\n"
-                )
-                requirements_md += f"- **Suggested Clarification:** {entry['gap']['suggested_clarification']}\n"
-                requirements_md += f"- **Confidence Level:** {entry['gap']['confidence_level']}\n"
-                if entry["related_tests"]:
-                    requirements_md += (
+            for tc in test_cases:
+                md += f"## {tc.id}: {tc.title}\n"
+                md += f"- **Module:** {tc.module}\n"
+                md += f"- **Priority:** {tc.priority}\n"
+                md += f"- **Type:** {tc.type}\n"
+                md += "- **Prerequisites:**\n"
+                for prereq in tc.prerequisites:
+                    md += f"  - {prereq}\n"
+                md += "- **Steps:**\n"
+                for step in tc.steps:
+                    md += f"  - {step}\n"
+                md += "- **Expected Results:**\n"
+                for result in tc.expected_results:
+                    md += f"  - {result}\n"
+                md += "\n"
+        return md
+
+    def format_additional_test_cases(self, gaps_with_tests: list[dict]) -> str:
+        """Format additional test cases grouped by gap into Markdown."""
+        md = "# Additional Tests for Gaps\n\n"
+        if not gaps_with_tests:
+            md += "No additional tests needed.\n"
+        else:
+            for item in gaps_with_tests:
+                gap = item["gap"]
+                tests = item["tests"]
+                md += f"## Gap: {gap['description']}\n"
+                md += f"- **Suggested Clarification:** {gap['suggested_clarification']}\n"
+                md += f"- **Confidence Level:** {gap['confidence_level']}\n\n"
+                for tc in tests:
+                    md += f"### {tc.id}: {tc.title}\n"
+                    md += f"- **Module:** {tc.module}\n"
+                    md += f"- **Priority:** {tc.priority}\n"
+                    md += f"- **Type:** {tc.type}\n"
+                    md += "- **Prerequisites:**\n"
+                    for prereq in tc.prerequisites:
+                        md += f"  - {prereq}\n"
+                    md += "- **Steps:**\n"
+                    for step in tc.steps:
+                        md += f"  - {step}\n"
+                    md += "- **Expected Results:**\n"
+                    for result in tc.expected_results:
+                        md += f"  - {result}\n"
+                    md += "\n"
+        return md
+
+    def format_gap_analysis(self, gaps_with_tests: list[dict]) -> str:
+        """Format gap analysis findings into Markdown."""
+        md = "# Gap Analysis\n\n"
+        if not gaps_with_tests:
+            md += "No gaps identified.\n"
+        else:
+            for i, item in enumerate(gaps_with_tests, start=1):
+                gap = item["gap"]
+                related_tests = [tc.id for tc in item["tests"]]
+                md += f"## Gap {i}\n"
+                md += f"- **Description:** {gap['description']}\n"
+                md += f"- **Suggested Clarification:** {gap['suggested_clarification']}\n"
+                md += f"- **Confidence Level:** {gap['confidence_level']}\n"
+                if related_tests:
+                    md += (
                         "- **Related Test Cases:** "
-                        + ", ".join(entry["related_tests"])
+                        + ", ".join(related_tests)
                         + "\n"
                     )
                 else:
-                    requirements_md += "- **Related Test Cases:** None\n"
-                requirements_md += "\n"
+                    md += "- **Related Test Cases:** None\n"
+                md += "\n"
+        return md
 
-        # Test Suite Section
-        suite_md = format_test_suite_to_markdown(finalTestSuite)
-
-        full_md = header + requirements_md + suite_md
-
-        return full_md, requirements_md
-
-    async def process_input(self, input_data: str) -> tuple[str, str]:
+    async def process_input(self, input_data: str):
+        """Process input and generate separate Markdown files."""
         if not input_data.strip():
             raise ValueError("Input cannot be empty")
 
@@ -161,22 +184,71 @@ class TestCaseGeneratorApp:
         validator = UserStoryValidator()
         result = validator(story=input_data)
         if not result.is_valid:
-            return (
-                result.error_message,
-                "",
-            )  # Return error message and empty string for requirements section on failure
+            logger.info(f"Error: {result.error_message}")
+            logger.info("User story is invalid, no test cases generated.")
+            return
 
-        logger.info("Generating test suite with edge cases")
-        finalTestSuite, final_gaps_analysis = self.generate_test_cases(
-            input_data
+        logger.info("Generating test suite components")
+        main_test_suite, edge_test_suite, gaps_with_tests = (
+            self.generate_test_cases(input_data)
         )
-        logger.info("Formatting output")
 
-        full_md, requirements_section = self.format_markdown_output(
-            finalTestSuite=finalTestSuite,
-            final_gaps_analysis=final_gaps_analysis,
+        logger.info("Format test cases to markdown")
+        main_md = self.format_test_cases(
+            main_test_suite.test_cases, "Main Test Cases"
         )
-        return full_md, requirements_section
+
+        logger.info("Format edge case tests to markdown")
+        edge_md = self.format_test_cases(
+            edge_test_suite.test_cases, "Edge Case Tests"
+        )
+
+        logger.info("Format additional test cases to markdown")
+        additional_md = self.format_additional_test_cases(gaps_with_tests)
+
+        logger.info("Format gap analysis to markdown")
+        gap_analysis_md = self.format_gap_analysis(gaps_with_tests)
+
+        logger.info("Ensure output directory exists")
+        os.makedirs("./output", exist_ok=True)
+
+        logger.info("Saving output files")
+        with open("./output/main_test_cases.md", "w", encoding="utf-8") as f:
+            f.write(main_md)
+        with open("./output/edge_case_tests.md", "w", encoding="utf-8") as f:
+            f.write(edge_md)
+        with open(
+            "./output/additional_gap_tests.md", "w", encoding="utf-8"
+        ) as f:
+            f.write(additional_md)
+        with open("./output/gap_analysis.md", "w", encoding="utf-8") as f:
+            f.write(gap_analysis_md)
+
+        logger.info("Test cases and analysis generated successfully.")
+        logger.info("Files saved in ./output directory:")
+        logger.info("- main_test_cases.md")
+        logger.info("- edge_case_tests.md")
+        logger.info("- gap_analysis.md")
+        logger.info("- additional_gap_tests.md")
+
+    async def run(self, file_path: str = None):
+        """Run the test case generation process."""
+        try:
+            logger.info("Reading input")
+            if file_path:
+                input_data = self.read_file(file_path)
+            elif not sys.stdin.isatty():
+                input_data = sys.stdin.read()
+            else:
+                raise ValueError(
+                    "Please provide input via file (--file) or stdin"
+                )
+
+            logger.info("Processing input and generating test cases")
+            await self.process_input(input_data)
+        except Exception as e:
+            logger.error(f"Error in run: {str(e)}")
+            raise
 
     def read_file(self, file_path: str) -> str:
         """Read content from a file."""
@@ -194,69 +266,20 @@ class TestCaseGeneratorApp:
                 f"Failed to read file '{file_path}': {str(e)}"
             ) from e
 
-    async def run(
-        self, file_path: str = None, output_path: str = "test_cases.md"
-    ):
-        """Run the test case generation process."""
-        try:
-            logger.info("Reading input")
-            if file_path:
-                input_data = self.read_file(file_path)
-            elif not sys.stdin.isatty():
-                input_data = sys.stdin.read()
-            else:
-                raise ValueError(
-                    "Please provide input via file (--file) or stdin"
-                )
-
-            logger.info("Processing input and generating test cases")
-            full_md, requirements_section = await self.process_input(
-                input_data
-            )
-
-            logger.info("Writing test cases to output file")
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(full_md)
-
-            logger.info("Writing requirements analysis to separate file")
-            with open("requirements_analysis.md", "w", encoding="utf-8") as f:
-                f.write(requirements_section)
-
-            logger.info(f"Test cases written to {output_path}")
-            logger.info(
-                "Requirements analysis written to requirements_analysis.md"
-            )
-            print(
-                f"Test cases generated successfully. Output written to {output_path}"
-            )
-            print("Requirements analysis written to requirements_analysis.md")
-        except Exception as e:
-            logger.error(f"Error in run: {str(e)}")
-            raise
-
 
 async def main():
     """Main application entry point."""
     _ = load_dotenv()
-
     parser = argparse.ArgumentParser(
         description="User Story to Test Case Converter"
     )
     parser.add_argument(
         "--file", type=str, help="Path to input file containing user story"
     )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="test_cases.md",
-        help="Output file path for test cases",
-    )
     args = parser.parse_args()
-
     app = TestCaseGeneratorApp()
-
     try:
-        await app.run(file_path=args.file, output_path=args.output)
+        await app.run(file_path=args.file)
     except Exception as e:
         logger.error(f"Application error: {str(e)}")
         print(f"Error: {str(e)}", file=sys.stderr)
