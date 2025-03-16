@@ -9,7 +9,13 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from src.validator import UserStoryValidator
-from src.testcase_generator import TestCaseGenerator, TestSuite
+from src.suite_generator import (
+    TestCaseGenerator,
+    EdgeCaseGenerator,
+    TestSuite,
+    format_test_suite_to_markdown,
+    trainset,
+)
 
 
 class TestCaseGeneratorApp:
@@ -37,14 +43,27 @@ class TestCaseGeneratorApp:
     def generate_test_cases(self, user_story: str) -> TestSuite:
         logger.info("Starting test case generation")
         start_time = datetime.now()
+
+        # Configure the language model for generation
         dspy.settings.configure(lm=self.lm_generator)
-        generator = TestCaseGenerator()
-        test_suite = generator(user_story=user_story)
+
+        # Generate initial functional test cases
+        logger.info("Generating functional test cases")
+        test_generator = TestCaseGenerator(trainset=trainset)
+        test_suite = test_generator.forward(user_story=user_story)
+
+        # Extend with edge cases
+        logger.info("Generating edge cases")
+        edge_generator = EdgeCaseGenerator()
+        extended_suite = edge_generator.forward(
+            user_story=user_story, test_suite=test_suite
+        )
+
         execution_time = (datetime.now() - start_time).total_seconds()
         logger.info(
-            f"Test suite generated successfully in {execution_time} seconds"
+            f"Test suite with edge cases generated successfully in {execution_time} seconds"
         )
-        return test_suite
+        return extended_suite
 
     def format_markdown_output(self, test_cases: str) -> str:
         """Format the output in proper Markdown."""
@@ -66,10 +85,9 @@ class TestCaseGeneratorApp:
         if not result.is_valid:
             return result.error_message
 
-        logger.info("Generating test suite")
+        logger.info("Generating test suite with edge cases")
         test_suite = self.generate_test_cases(input_data)
         logger.info("Formatting output")
-        from src.testcase_generator import format_test_suite_to_markdown
 
         formatted_output = format_test_suite_to_markdown(test_suite)
         return formatted_output
@@ -110,7 +128,8 @@ class TestCaseGeneratorApp:
 
             logger.info("Writing test cases to output file")
             with open(output_path, "w", encoding="utf-8") as f:
-                f.write(result)
+                markdown_output = self.format_markdown_output(result)
+                f.write(markdown_output)
 
             logger.info(f"Test cases written to {output_path}")
             print(
