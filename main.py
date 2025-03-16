@@ -15,6 +15,11 @@ from src.suite_generator import (
     TestSuite,
     format_test_suite_to_markdown,
     trainset,
+    TestCase,
+)
+from src.gap_analyzer import (
+    RequirementGapAnalyzer,
+    ClarificationTestCaseGenerator,
 )
 
 
@@ -40,39 +45,114 @@ class TestCaseGeneratorApp:
             api_key=os.environ["OPENAI_API_KEY"],
         )
 
-    def generate_test_cases(self, user_story: str) -> TestSuite:
-        logger.info("Starting test case generation")
-        start_time = datetime.now()
-
+    def generate_test_cases(
+        self, user_story: str
+    ) -> tuple[TestSuite, list[dict]]:
         logger.info("Configuring language model for test case generation")
         dspy.settings.configure(lm=self.lm_generator)
 
+        logger.info("Starting requirement gap analysis")
+        gap_analyzer = RequirementGapAnalyzer()
+        gaps_list = gap_analyzer.forward(user_story=user_story)
+
+        logger.info("Generating additional test cases for gaps")
+        clarification_generator = ClarificationTestCaseGenerator()
+        gaps_with_tests = []
+        for i, gap_dict in enumerate(gaps_list or [], start=1):
+            description = gap_dict.get("description", "")
+            clarification = gap_dict.get("suggested_clarification", "")
+            confidence_level = gap_dict.get("confidence_level", "")
+            logger.info(f"Generating test cases for gap {i}: {description}")
+            additional_tests_json = clarification_generator.forward(
+                user_story=user_story, clarification=clarification
+            )
+            additional_tests_pydantic = [
+                TestCase(**tc) for tc in additional_tests_json
+            ]
+            gaps_with_tests.append(
+                {
+                    "gap": {
+                        "description": description,
+                        "suggested_clarification": clarification,
+                        "confidence_level": confidence_level,
+                    },
+                    "tests": additional_tests_pydantic,
+                }
+            )
+
         logger.info("Generating functional test cases")
         test_generator = TestCaseGenerator(trainset=trainset)
-        test_suite = test_generator.forward(user_story=user_story)
+        mainTestSuite = test_generator.forward(user_story=user_story)
+
+        logger.info("Combining main and additional test cases")
+        combined_test_cases = mainTestSuite.test_cases + [
+            test for item in gaps_with_tests for test in item["tests"]
+        ]
 
         logger.info("Generating edge cases")
         edge_generator = EdgeCaseGenerator()
-        extended_suite = edge_generator.forward(
-            user_story=user_story, test_suite=test_suite
+        extendedSuite = edge_generator.forward(
+            user_story=user_story,
+            test_suite=TestSuite(
+                title="Combined", test_cases=combined_test_cases
+            ),
         )
 
-        execution_time = (datetime.now() - start_time).total_seconds()
-        logger.info(
-            f"Test suite with edge cases generated successfully in {execution_time} seconds"
-        )
-        return extended_suite
+        logger.info("Assigning unique IDs")
+        allTests = extendedSuite.test_cases
+        for idx, tc in enumerate(allTests or [], start=1):
+            tc.id = f"TC{idx:03d}"
 
-    def format_markdown_output(self, test_cases: str) -> str:
-        """Format the output in proper Markdown."""
+        finalTestSuite = TestSuite(
+            title="Final Test Suite", test_cases=allTests
+        )
+
+        # Prepare gaps with related test IDs
+        final_gaps_analysis = []
+        for item in gaps_with_tests:
+            related_test_ids = [tc.id for tc in item["tests"]]
+            final_gaps_analysis.append(
+                {"gap": item["gap"], "related_tests": related_test_ids}
+            )
+
+        return finalTestSuite, final_gaps_analysis
+
+    def format_markdown_output(
+        self, finalTestSuite: TestSuite, final_gaps_analysis: list[dict]
+    ) -> tuple[str, str]:
         current_date = datetime.now().strftime("%Y-%m-%d")
-        header = f"""# Test Suite: Token Access & Management
-*Generated on: {current_date}*
+        header = f"""# Test Suite: Token Access & Management\n*Generated on: {current_date}*\n\n"""
 
-"""
-        return header + test_cases
+        # Requirements Analysis Section
+        requirements_md = "## Requirements Analysis\n\n"
+        if not final_gaps_analysis:
+            requirements_md += "No gaps identified.\n"
+        else:
+            for i, entry in enumerate(final_gaps_analysis or [], start=1):
+                requirements_md += f"### Gap {i}\n"
+                requirements_md += (
+                    f"- **Description:** {entry['gap']['description']}\n"
+                )
+                requirements_md += f"- **Suggested Clarification:** {entry['gap']['suggested_clarification']}\n"
+                requirements_md += f"- **Confidence Level:** {entry['gap']['confidence_level']}\n"
+                if entry["related_tests"]:
+                    requirements_md += (
+                        "- **Related Test Cases:** "
+                        + ", ".join(entry["related_tests"])
+                        + "\n"
+                    )
+                else:
+                    requirements_md += "- **Related Test Cases:** None\n"
+                requirements_md += "\n"
 
-    async def process_input(self, input_data: str) -> str:
+        # Test Suite Section
+        suite_md = format_test_suite_to_markdown(finalTestSuite)
+
+        full_md = header + requirements_md + suite_md
+
+        return full_md, requirements_md
+
+    async def process_input(self, input_data: str) -> tuple[str, str]:
         if not input_data.strip():
             raise ValueError("Input cannot be empty")
 
@@ -81,14 +161,22 @@ class TestCaseGeneratorApp:
         validator = UserStoryValidator()
         result = validator(story=input_data)
         if not result.is_valid:
-            return result.error_message
+            return (
+                result.error_message,
+                "",
+            )  # Return error message and empty string for requirements section on failure
 
         logger.info("Generating test suite with edge cases")
-        test_suite = self.generate_test_cases(input_data)
+        finalTestSuite, final_gaps_analysis = self.generate_test_cases(
+            input_data
+        )
         logger.info("Formatting output")
 
-        formatted_output = format_test_suite_to_markdown(test_suite)
-        return formatted_output
+        full_md, requirements_section = self.format_markdown_output(
+            finalTestSuite=finalTestSuite,
+            final_gaps_analysis=final_gaps_analysis,
+        )
+        return full_md, requirements_section
 
     def read_file(self, file_path: str) -> str:
         """Read content from a file."""
@@ -122,17 +210,26 @@ class TestCaseGeneratorApp:
                 )
 
             logger.info("Processing input and generating test cases")
-            result = await self.process_input(input_data)
+            full_md, requirements_section = await self.process_input(
+                input_data
+            )
 
             logger.info("Writing test cases to output file")
             with open(output_path, "w", encoding="utf-8") as f:
-                markdown_output = self.format_markdown_output(result)
-                f.write(markdown_output)
+                f.write(full_md)
+
+            logger.info("Writing requirements analysis to separate file")
+            with open("requirements_analysis.md", "w", encoding="utf-8") as f:
+                f.write(requirements_section)
 
             logger.info(f"Test cases written to {output_path}")
+            logger.info(
+                "Requirements analysis written to requirements_analysis.md"
+            )
             print(
                 f"Test cases generated successfully. Output written to {output_path}"
             )
+            print("Requirements analysis written to requirements_analysis.md")
         except Exception as e:
             logger.error(f"Error in run: {str(e)}")
             raise
@@ -149,7 +246,10 @@ async def main():
         "--file", type=str, help="Path to input file containing user story"
     )
     parser.add_argument(
-        "--output", type=str, default="test_cases.md", help="Output file path"
+        "--output",
+        type=str,
+        default="test_cases.md",
+        help="Output file path for test cases",
     )
     args = parser.parse_args()
 
