@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from src.edgecase_generator import (
+from src.suite_generator import (
     TestSuite,
     TestCase,
     EdgeCasePrediction,

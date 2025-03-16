@@ -139,6 +139,11 @@ class EdgeCaseGeneratorModule(dspy.Module):
             edge_cases_list = parsed_data["edge_cases"]
             if not isinstance(edge_cases_list, list):
                 raise ValueError("Edge cases must be a JSON list")
+            for edge_case in edge_cases_list:
+                if not isinstance(edge_case, dict) or "title" not in edge_case:
+                    raise ValueError(
+                        "Each edge case must be a JSON object with a 'title' field"
+                    )
             return edge_cases_list
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse edge cases JSON: {e}") from e
