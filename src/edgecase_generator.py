@@ -80,8 +80,30 @@ class EdgeCaseGeneratorModule(dspy.Module):
             reason=reason,
             existing_test_suite=existing_test_suite,
         )
+        logger.debug(f"Raw edge cases prediction: {prediction.edge_cases}")
         try:
-            edge_cases_list = json.loads(prediction.edge_cases)
+            # Parse the JSON string into a Python object
+            parsed_data = json.loads(prediction.edge_cases)
+
+            # Check if the "edge_cases" key exists
+            if "edge_cases" not in parsed_data:
+                raise ValueError("Missing 'edge_cases' key in prediction")
+
+            # Extract the list from the "edge_cases" key
+            edge_cases_list = parsed_data["edge_cases"]
+
+            # Validate that it's a list
+            if not isinstance(edge_cases_list, list):
+                raise ValueError("Edge cases must be a JSON list")
+
+            # Optional: Validate that each item is a dictionary
+            for edge_case in edge_cases_list:
+                if not isinstance(edge_case, dict):
+                    raise ValueError(
+                        "Each edge case must be a JSON object (dictionary)"
+                    )
+
+            # Return the list of edge cases
             return edge_cases_list
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse edge cases JSON: {e}")
