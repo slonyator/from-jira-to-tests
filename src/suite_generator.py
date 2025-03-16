@@ -7,7 +7,6 @@ import dspy
 from dspy.teleprompt import LabeledFewShot
 
 
-# Shared Models
 class TestCase(BaseModel):
     id: str = Field(..., description="Unique test case identifier")
     title: str = Field(..., description="Test case title")
@@ -24,7 +23,6 @@ class TestSuite(BaseModel):
     test_cases: list[TestCase] = Field(default_factory=list)
 
 
-# Shared Formatting Function
 def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
     """Format the test suite into a Markdown string."""
     if not test_suite.test_cases:
@@ -49,7 +47,6 @@ def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
     return markdown
 
 
-# Test Case Generator Components
 class UserStoryToTestSuite(dspy.Signature):
     """Convert a user story into a test suite with detailed functional test cases covering all requirements."""
 
@@ -81,7 +78,6 @@ class TestCaseGenerator(dspy.Module):
             raise ValueError(f"Failed to create TestSuite: {e}") from e
 
 
-# Edge Case Generator Components
 class EdgeCasePrediction(BaseModel):
     needs_edge_cases: bool
     reason: str
@@ -180,7 +176,6 @@ class EdgeCaseGenerator:
         return test_suite
 
 
-# Example Data for TestCaseGenerator
 example_user_story_1 = (
     "As a user, I want to create a new account so that I can log in later.\n"
     "## Account Creation\n- Users can create one account via the registration page.\n- UX/UI: 'Register' button is enabled only if all fields are filled."
@@ -244,6 +239,7 @@ example_test_suite_2 = TestSuite(
         )
     ],
 )
+
 trainset = [
     dspy.Example(
         user_story=example_user_story_1,
@@ -256,7 +252,6 @@ trainset = [
 ]
 
 
-# Main Function
 def main():
     load_dotenv()
     generator_model = "openai/gpt-4o-mini"
@@ -273,7 +268,6 @@ def main():
     )
     dspy.settings.configure(lm=lm_generator)
 
-    # Example user story for testing
     user_story = (
         "# **Extension Tokens**\n\n"
         "## New Extension Tokens have user-based access\n"
@@ -314,17 +308,14 @@ def main():
         "- Legacy tokens will have Global Access (access to all apps, as of today). This will be indicated in the Access Level column. With the tooltip: Token has access to all apps."
     )
 
-    # Generate initial test suite
     test_generator = TestCaseGenerator(trainset=trainset)
     initial_suite = test_generator.forward(user_story)
 
-    # Extend with edge cases
     edge_generator = EdgeCaseGenerator()
     extended_suite = edge_generator.forward(
         user_story=user_story, test_suite=initial_suite
     )
 
-    # Output results
     formatted_output = format_test_suite_to_markdown(extended_suite)
     print(formatted_output)
 
