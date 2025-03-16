@@ -45,25 +45,43 @@ class TestCaseGeneratorApp:
         )
         self.output_formatter = OutputFormatter()
 
+    def get_test_key(self, test_case):
+        """Create a unique key based on steps and expected results."""
+        steps_str = "|".join(test_case.steps)
+        expected_str = "|".join(test_case.expected_results)
+        return f"{steps_str}|{expected_str}"
+
     def generate_test_cases(
         self, user_story: str
     ) -> tuple[TestSuite, TestSuite, list[dict]]:
-        """Generate separate test suites and gap analysis with related tests."""
         dspy.settings.configure(lm=self.lm_generator)
+        unique_test_keys = set()
 
         logger.info("Generating functional test cases")
         test_generator = TestCaseGenerator(trainset=trainset)
         main_test_suite = test_generator.forward(user_story=user_story)
-        for idx, tc in enumerate(main_test_suite.test_cases, start=1):
-            tc.id = f"TC{idx:03d}"
+        main_tests = []
+        for tc in main_test_suite.test_cases:
+            key = self.get_test_key(tc)
+            logger.info("Ensure test case is unique")
+            if key not in unique_test_keys:
+                main_tests.append(tc)
+                unique_test_keys.add(key)
+        main_test_suite.test_cases = main_tests
 
         logger.info("Generating edge cases")
         edge_generator = EdgeCaseGenerator()
         edge_test_suite = edge_generator.forward(
             user_story=user_story, test_suite=main_test_suite
         )
-        for idx, tc in enumerate(edge_test_suite.test_cases, start=1):
-            tc.id = f"EC{idx:03d}"
+        edge_tests = []
+        for tc in edge_test_suite.test_cases:
+            key = self.get_test_key(tc)
+            logger.info("Ensure test case is unique")
+            if key not in unique_test_keys:
+                edge_tests.append(tc)
+                unique_test_keys.add(key)
+        edge_test_suite.test_cases = edge_tests
 
         logger.info("Starting requirement gap analysis")
         gap_analyzer = RequirementGapAnalyzer()
@@ -72,7 +90,6 @@ class TestCaseGeneratorApp:
         logger.info("Generating additional test cases for gaps")
         clarification_generator = ClarificationTestCaseGenerator()
         gaps_with_tests = []
-        current_id = 1
         for gap_dict in gaps_list or []:
             description = gap_dict.get("description", "")
             clarification = gap_dict.get("suggested_clarification", "")
@@ -84,9 +101,17 @@ class TestCaseGeneratorApp:
             additional_tests_pydantic = [
                 TestCase(**tc) for tc in additional_tests_json
             ]
+            unique_additional_tests = []
             for tc in additional_tests_pydantic:
-                tc.id = f"GT{current_id:03d}"
-                current_id += 1
+                key = self.get_test_key(tc)
+                logger.info("Ensure test case is unique")
+                if key not in unique_test_keys:
+                    unique_additional_tests.append(tc)
+                    unique_test_keys.add(key)
+                else:
+                    logger.info(
+                        f"Skipping duplicate test for gap '{description}': {tc.title}"
+                    )
             gaps_with_tests.append(
                 {
                     "gap": {
@@ -94,9 +119,22 @@ class TestCaseGeneratorApp:
                         "suggested_clarification": clarification,
                         "confidence_level": confidence_level,
                     },
-                    "tests": additional_tests_pydantic,
+                    "tests": unique_additional_tests,
                 }
             )
+
+        logger.info("Assigning unique IDs to test cases")
+        current_id = 1
+        for tc in main_test_suite.test_cases:
+            tc.id = f"TC{current_id:03d}"
+            current_id += 1
+        for tc in edge_test_suite.test_cases:
+            tc.id = f"EC{current_id:03d}"
+            current_id += 1
+        for item in gaps_with_tests:
+            for tc in item["tests"]:
+                tc.id = f"GT{current_id:03d}"
+                current_id += 1
 
         return main_test_suite, edge_test_suite, gaps_with_tests
 
