@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 import dspy
 
 
-# Pydantic Models
 class TestCase(BaseModel):
     id: str = Field(..., description="Unique test case identifier")
     title: str = Field(..., description="Test case title")
@@ -28,7 +27,6 @@ class EdgeCasePrediction(BaseModel):
     reason: str
 
 
-# DSPy Signatures
 class UserStoryToEdgeCasePrediction(dspy.Signature):
     """Determine if edge cases are necessary based on the user story. Consider scenarios like network issues, concurrent requests, or other potential edge cases that might not be explicitly mentioned but could impact reliability or performance."""
 
@@ -51,7 +49,6 @@ class UserStoryToEdgeCases(dspy.Signature):
     )
 
 
-# DSPy Modules
 class EdgeCasePredictor(dspy.Module):
     def __init__(self):
         super().__init__()
@@ -96,12 +93,9 @@ class EdgeCaseGeneratorModule(dspy.Module):
                     )
             return edge_cases_list
         except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Failed to parse edge cases JSON: {e}"
-            ) from e  # Added "from e"
+            raise ValueError(f"Failed to parse edge cases JSON: {e}") from e
 
 
-# EdgeCaseGenerator Class
 class EdgeCaseGenerator:
     def __init__(self):
         """Initialize with predictor and generator modules."""
@@ -144,7 +138,6 @@ class EdgeCaseGenerator:
         return test_suite
 
 
-# Utility Function
 def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
     """Format the test suite into a Markdown string."""
     if not test_suite.test_cases:
@@ -169,7 +162,6 @@ def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
     return markdown
 
 
-# Main Function
 def main():
     """Main execution function to generate and output the extended test suite."""
     load_dotenv()
