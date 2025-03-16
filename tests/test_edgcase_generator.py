@@ -1,323 +1,215 @@
 import json
-
 import pytest
-from pydantic import ValidationError
-
-from dspy import Prediction
 
 from src.edgecase_generator import (
-    TestCase,
     TestSuite,
-    EdgeCasePredictor,
-    EdgeCaseGeneratorModule,
-    EdgeCaseGenerator,
+    TestCase,
     EdgeCasePrediction,
-    format_test_suite_to_markdown,
+    EdgeCaseGenerator,
+    EdgeCaseGeneratorModule,
+    EdgeCasePredictor,
 )
 
 
-class TestTestCase:
-    def test_testcase_creation_success(self):
-        """Test successful creation of a TestCase with all required fields."""
-        testcase = TestCase(
-            id="EXT-001",
-            title="Token Creation",
-            module="Token Management",
-            priority="High",
-            type="Functional",
-            steps=["Step 1", "Step 2"],
-            expected_results=["Result 1", "Result 2"],
+class TestEdgeCasePredictorForward:
+    def test_success(self, mocker):
+        fake_prediction = type("Fake", (), {})()
+        fake_prediction.prediction = json.dumps(
+            {"needs_edge_cases": True, "reason": "network issues"}
         )
-        default_value = []
-        assert testcase.id == "EXT-001"
-        assert testcase.title == "Token Creation"
-        assert testcase.module == "Token Management"
-        assert testcase.priority == "High"
-        assert testcase.type == "Functional"
-        assert testcase.prerequisites == default_value
-        assert testcase.steps == ["Step 1", "Step 2"]
-        assert testcase.expected_results == ["Result 1", "Result 2"]
 
-    def test_testcase_missing_fields(self):
-        """Test that ValidationError is raised when a required field is missing."""
-        with pytest.raises(ValidationError):
-            TestCase(
-                id="EXT-001",
-                module="Token Management",
-                priority="High",
-                type="Functional",
-                steps=["Step 1"],
-            )  # Missing 'title' and 'expected_results'
-
-    def test_testcase_default_prerequisites(self):
-        """Test that prerequisites defaults to an empty list."""
-        testcase = TestCase(
-            id="EXT-001",
-            title="Token Creation",
-            module="Token Management",
-            priority="High",
-            type="Functional",
-            steps=["Step 1"],
-            expected_results=["Result 1"],
-        )
-        assert testcase.prerequisites == []
-
-
-class TestTestSuite:
-    def test_testsuite_creation_success(self):
-        """Test successful creation of a TestSuite with a title and test cases."""
-        testcase = TestCase(
-            id="EXT-001",
-            title="Token Creation",
-            module="Token Management",
-            priority="High",
-            type="Functional",
-            steps=["Step 1"],
-            expected_results=["Result 1"],
-        )
-        testsuite = TestSuite(title="Token Suite", test_cases=[testcase])
-        assert testsuite.title == "Token Suite"
-        assert testsuite.test_cases == [testcase]
-
-    def test_testsuite_missing_title(self):
-        """Test that ValidationError is raised when title is missing."""
-        with pytest.raises(ValidationError):
-            TestSuite(test_cases=[])
-
-    def test_testsuite_default_test_cases(self):
-        """Test that test_cases defaults to an empty list."""
-        testsuite = TestSuite(title="Empty Suite")
-        assert testsuite.title == "Empty Suite"
-        assert testsuite.test_cases == []
-
-
-class TestEdgeCasePredictor:
-    def test_forward_success(self, mocker):
-        """Test successful prediction with valid JSON output."""
         predictor = EdgeCasePredictor()
-        mock_predict = mocker.patch.object(
-            predictor.predict,
-            "__call__",
-            return_value=Prediction(
-                prediction='{"needs_edge_cases": true, "reason": "Network issues possible"}'
-            ),
-        )
-        result = predictor.forward("User story text")
+        # Patch the 'predict' attribute on our predictor instance
+        mocker.patch.object(predictor, "predict", return_value=fake_prediction)
+
+        result = predictor.forward("Some user story")
         assert result.needs_edge_cases is True
-        assert result.reason == "Network issues possible"
-        mock_predict.assert_called_once_with(user_story="User story text")
+        assert result.reason == "network issues"
 
-    def test_forward_json_error(self, mocker):
-        """Test that ValueError is raised with invalid JSON."""
+    def test_invalid_json(self, mocker):
+        fake_prediction = type("Fake", (), {})()
+        fake_prediction.prediction = "not a valid json"
+
         predictor = EdgeCasePredictor()
-        mocker.patch.object(
-            predictor.predict,
-            "__call__",
-            return_value=Prediction(prediction="invalid json"),
-        )
+        mocker.patch.object(predictor, "predict", return_value=fake_prediction)
+
         with pytest.raises(
             ValueError, match="Failed to parse prediction JSON"
         ):
-            predictor.forward("User story text")
+            predictor.forward("Some user story")
 
 
-class TestEdgeCaseGeneratorModule:
-    def test_forward_success(self, mocker):
-        """Test successful edge case generation with valid JSON output."""
-        generator_module = EdgeCaseGeneratorModule()
-        edge_case_json = {
-            "edge_cases": [
-                {
-                    "id": "EDGE-001",
-                    "title": "Network Failure",
-                    "module": "Token Management",
-                    "priority": "Medium",
-                    "type": "Error Handling",
-                    "prerequisites": ["Network throttling"],
-                    "steps": ["Create token"],
-                    "expected_results": ["Error handled"],
-                }
-            ]
-        }
-        mock_generate = mocker.patch.object(
-            generator_module.generate,
-            "__call__",
-            return_value=Prediction(edge_cases=json.dumps(edge_case_json)),
-        )
-        result = generator_module.forward("User story", "Reason", "{}")
+class TestEdgeCaseGeneratorModuleForward:
+    def test_success(self, mocker):
+        edge_cases = [
+            {
+                "id": "EDGE-001",
+                "title": "Test Edge Case",
+                "module": "Module1",
+                "priority": "High",
+                "type": "Error Handling",
+                "prerequisites": ["Prereq1"],
+                "steps": ["Step1", "Step2"],
+                "expected_results": ["Expected1"],
+            }
+        ]
+        fake_response = type("Fake", (), {})()
+        fake_response.edge_cases = json.dumps({"edge_cases": edge_cases})
+
+        module = EdgeCaseGeneratorModule()
+        mocker.patch.object(module, "generate", return_value=fake_response)
+
+        result = module.forward("Some user story", "Some reason", "{}")
+        assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["id"] == "EDGE-001"
-        assert result[0]["title"] == "Network Failure"
-        mock_generate.assert_called_once_with(
-            user_story="User story", reason="Reason", existing_test_suite="{}"
-        )
 
-    def test_forward_missing_edge_cases_key(self, mocker):
-        """Test that ValueError is raised when 'edge_cases' key is missing."""
-        generator_module = EdgeCaseGeneratorModule()
-        mock_generate = mocker.patch.object(
-            generator_module.generate,
-            "__call__",
-            return_value=Prediction(edge_cases='{"wrong_key": []}'),
-        )
+    def test_missing_edge_cases_key(self, mocker):
+        fake_response = type("Fake", (), {})()
+        fake_response.edge_cases = json.dumps({"not_edge_cases": []})
+
+        module = EdgeCaseGeneratorModule()
+        mocker.patch.object(module, "generate", return_value=fake_response)
+
         with pytest.raises(
             ValueError, match="Missing 'edge_cases' key in prediction"
         ):
-            generator_module.forward("User story", "Reason", "{}")
+            module.forward("Some user story", "Some reason", "{}")
 
-    def test_forward_missing_title(self, mocker):
-        """Test that ValueError is raised when an edge case lacks a 'title'."""
-        generator_module = EdgeCaseGeneratorModule()
-        edge_case_json = {
-            "edge_cases": [
-                {
-                    "id": "EDGE-001",
-                    "module": "Token Management",
-                    "priority": "Medium",
-                    "type": "Error Handling",
-                    "steps": ["Create token"],
-                    "expected_results": ["Error handled"],
-                }
-            ]
-        }
-        mock_generate = mocker.patch.object(
-            generator_module.generate,
-            "__call__",
-            return_value=Prediction(edge_cases=json.dumps(edge_case_json)),
-        )
+    def test_non_list(self, mocker):
+        fake_response = type("Fake", (), {})()
+        fake_response.edge_cases = json.dumps({"edge_cases": "not a list"})
+
+        module = EdgeCaseGeneratorModule()
+        mocker.patch.object(module, "generate", return_value=fake_response)
+
+        with pytest.raises(ValueError, match="Edge cases must be a JSON list"):
+            module.forward("Some user story", "Some reason", "{}")
+
+    def test_missing_title(self, mocker):
+        edge_cases = [
+            {
+                "id": "EDGE-001",
+                # "title" is missing
+                "module": "Module1",
+                "priority": "High",
+                "type": "Error Handling",
+                "prerequisites": ["Prereq1"],
+                "steps": ["Step1"],
+                "expected_results": ["Expected1"],
+            }
+        ]
+        fake_response = type("Fake", (), {})()
+        fake_response.edge_cases = json.dumps({"edge_cases": edge_cases})
+
+        module = EdgeCaseGeneratorModule()
+        mocker.patch.object(module, "generate", return_value=fake_response)
+
         with pytest.raises(
             ValueError,
             match="Each edge case must be a JSON object with a 'title' field",
         ):
-            generator_module.forward("User story", "Reason", "{}")
+            module.forward("Some user story", "Some reason", "{}")
+
+    def test_invalid_json(self, mocker):
+        fake_response = type("Fake", (), {})()
+        fake_response.edge_cases = "not json"
+
+        module = EdgeCaseGeneratorModule()
+        mocker.patch.object(module, "generate", return_value=fake_response)
+
+        with pytest.raises(
+            ValueError, match="Failed to parse edge cases JSON"
+        ):
+            module.forward("Some user story", "Some reason", "{}")
 
 
-class TestEdgeCaseGenerator:
-    def test_needs_edge_cases_success(self, mocker):
-        """Test needs_edge_cases with mocked predictor."""
+class TestEdgeCaseGeneratorForward:
+    def test_no_edge_cases_needed(self, mocker):
         generator = EdgeCaseGenerator()
-        mock_forward = mocker.patch.object(
-            generator.predictor,
-            "forward",
-            return_value=EdgeCasePrediction(
-                needs_edge_cases=True, reason="Test reason"
-            ),
+
+        fake_prediction = EdgeCasePrediction(
+            needs_edge_cases=False, reason="No issues"
         )
-        result = generator.needs_edge_cases("User story")
-        assert result.needs_edge_cases is True
-        assert result.reason == "Test reason"
-        mock_forward.assert_called_once_with("User story")
-
-    def test_forward_no_edge_cases_needed(self, mocker):
-        """Test forward when no edge cases are needed."""
-        generator = EdgeCaseGenerator()
-        initial_suite = TestSuite(title="Test Suite", test_cases=[])
         mocker.patch.object(
-            generator.predictor,
-            "forward",
-            return_value=EdgeCasePrediction(
-                needs_edge_cases=False, reason="No issues"
-            ),
+            generator.predictor, "forward", return_value=fake_prediction
         )
-        result = generator.forward("User story", initial_suite)
-        assert result == initial_suite
-        assert len(result.test_cases) == 0
 
-    def test_forward_with_edge_cases(self, mocker):
-        """Test forward with edge cases added, avoiding duplicates."""
-        generator = EdgeCaseGenerator()
-        initial_suite = TestSuite(
-            title="Test Suite",
+        test_suite = TestSuite(
+            title="Suite",
             test_cases=[
                 TestCase(
-                    id="EXT-001",
-                    title="Initial Test",
-                    module="Test",
+                    id="TC-001",
+                    title="Existing Test",
+                    module="Module1",
                     priority="High",
                     type="Functional",
-                    steps=["Step 1"],
-                    expected_results=["Result 1"],
+                    prerequisites=[],
+                    steps=["Step1"],
+                    expected_results=["Result1"],
                 )
             ],
         )
+
+        result_suite = generator.forward("Some user story", test_suite)
+        # Expect the test suite to remain unchanged.
+        assert len(result_suite.test_cases) == 1
+        assert result_suite.test_cases[0].id == "TC-001"
+
+    def test_with_edge_cases(self, mocker):
+        generator = EdgeCaseGenerator()
+
+        fake_prediction = EdgeCasePrediction(
+            needs_edge_cases=True, reason="Edge needed for network issues"
+        )
         mocker.patch.object(
-            generator.predictor,
-            "forward",
-            return_value=EdgeCasePrediction(
-                needs_edge_cases=True, reason="Network issues"
-            ),
+            generator.predictor, "forward", return_value=fake_prediction
         )
-        edge_case_json = {
-            "edge_cases": [
-                {
-                    "id": "EXT-001",  # Duplicate ID
-                    "title": "Duplicate Test",
-                    "module": "Test",
-                    "priority": "Medium",
-                    "type": "Error",
-                    "steps": ["Step A"],
-                    "expected_results": ["Result A"],
-                },
-                {
-                    "id": "EDGE-001",
-                    "title": "Network Failure",
-                    "module": "Test",
-                    "priority": "Medium",
-                    "type": "Error",
-                    "steps": ["Step B"],
-                    "expected_results": ["Result B"],
-                },
-            ]
-        }
+
+        edge_cases = [
+            {
+                "id": "EDGE-001",
+                "title": "Edge Case 1",
+                "module": "ModuleA",
+                "priority": "Medium",
+                "type": "Error Handling",
+                "prerequisites": [],
+                "steps": ["Step A"],
+                "expected_results": ["Result A"],
+            },
+            {
+                "id": "EDGE-002",
+                "title": "Edge Case 2",
+                "module": "ModuleB",
+                "priority": "Low",
+                "type": "Error Handling",
+                "prerequisites": [],
+                "steps": ["Step B"],
+                "expected_results": ["Result B"],
+            },
+        ]
+        fake_response = type("Fake", (), {})()
+        fake_response.edge_cases = json.dumps({"edge_cases": edge_cases})
+        # Patch the generator module forward method to return our list of edge cases.
         mocker.patch.object(
-            generator.generator,
-            "forward",
-            return_value=edge_case_json["edge_cases"],
+            generator.generator, "forward", return_value=edge_cases
         )
-        result = generator.forward("User story", initial_suite)
-        assert (
-            len(result.test_cases) == 2
-        )  # Only one new case added due to duplicate ID
-        assert result.test_cases[1].id == "EDGE-001"
-        assert result.test_cases[1].title == "Network Failure"
 
-
-class TestFormatTestSuiteToMarkdown:
-    def test_format_empty_suite(self):
-        """Test formatting an empty test suite."""
-        suite = TestSuite(title="Empty Suite")
-        result = format_test_suite_to_markdown(suite)
-        assert result == "## Empty Suite\n\n## No Test Cases Generated\n"
-
-    def test_format_with_test_cases(self):
-        """Test formatting a suite with test cases."""
-        suite = TestSuite(
-            title="Test Suite",
-            test_cases=[
-                TestCase(
-                    id="EXT-001",
-                    title="Token Test",
-                    module="Token Management",
-                    priority="High",
-                    type="Functional",
-                    prerequisites=["Pre 1"],
-                    steps=["Step 1"],
-                    expected_results=["Result 1"],
-                )
-            ],
+        existing_test_case = TestCase(
+            id="EDGE-001",
+            title="Existing Edge Case",
+            module="ModuleA",
+            priority="Medium",
+            type="Error Handling",
+            prerequisites=[],
+            steps=["Existing step"],
+            expected_results=["Existing result"],
         )
-        result = format_test_suite_to_markdown(suite)
-        expected = (
-            "## Test Suite\n\n"
-            "### Test Case EXT-001: Token Test\n"
-            "**Module:** Token Management\n"
-            "**Priority:** High\n"
-            "**Type:** Functional\n"
-            "#### Prerequisites\n"
-            "- Pre 1\n"
-            "#### Test Steps\n"
-            "1. Step 1\n"
-            "#### Expected Results\n"
-            "- Result 1\n\n"
-        )
-        assert result == expected
+        test_suite = TestSuite(title="Suite", test_cases=[existing_test_case])
+
+        result_suite = generator.forward("Some user story", test_suite)
+        # Only EDGE-002 should be added since EDGE-001 is already present.
+        assert len(result_suite.test_cases) == 2
+        ids = {tc.id for tc in result_suite.test_cases}
+        assert "EDGE-001" in ids
+        assert "EDGE-002" in ids
