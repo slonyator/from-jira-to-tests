@@ -1,12 +1,12 @@
 import os
 import json
-import dspy
 from dotenv import load_dotenv
 from loguru import logger
 from pydantic import BaseModel, Field
+import dspy
 
 
-# Pydantic Models (unchanged)
+# Pydantic Models
 class TestCase(BaseModel):
     id: str = Field(..., description="Unique test case identifier")
     module: str = Field(..., description="Module being tested")
@@ -22,93 +22,122 @@ class TestSuite(BaseModel):
     test_cases: list[TestCase] = Field(default_factory=list)
 
 
-# New Signature for Missing Edge Cases
-class UserStoryToMissingEdgeCases(dspy.Signature):
-    """Analyze a user story and an existing test suite to identify and generate missing edge case test cases in JSON format.
-    The output must be a JSON list of test case objects that cover edge scenarios (e.g., network failures, concurrency issues, boundary conditions) not already addressed in the existing test suite. Each test case object must include:
-    - 'id': a unique string identifier (e.g., 'EDGE-001'),
-    - 'module': a string (e.g., 'Token Management'),
-    - 'priority': a string (e.g., 'High', 'Medium', 'Low'),
-    - 'type': a string (e.g., 'Error Handling', 'Concurrency'),
-    - 'prerequisites': a list of strings (optional, default empty),
-    - 'steps': a list of strings detailing the test steps,
-    - 'expected_results': a list of strings detailing the expected outcomes.
-    Review the user story for triggers like 'deactivated', 'deleted', 'only one', 'limit', 'network', 'error', or 'concurrent', and ensure the output only includes edge cases not already covered by the existing test suite’s test cases (provided as JSON)."""
+class EdgeCasePrediction(BaseModel):
+    needs_edge_cases: bool
+    reason: str
+
+
+# DSPy Signatures
+class UserStoryToEdgeCasePrediction(dspy.Signature):
+    """Determine if edge cases are necessary based on the user story. Consider scenarios like network issues, concurrent requests, or other potential edge cases that might not be explicitly mentioned but could impact reliability or performance."""
 
     user_story = dspy.InputField(desc="User story text")
+    prediction = dspy.OutputField(
+        desc="Prediction in JSON format with 'needs_edge_cases' (boolean) and 'reason' (string)"
+    )
+
+
+class UserStoryToEdgeCases(dspy.Signature):
+    """Generate edge case test cases based on the user story, the reason for needing edge cases, and the existing test suite. Ensure no duplicate test cases."""
+
+    user_story = dspy.InputField(desc="User story text")
+    reason = dspy.InputField(desc="Reason for needing edge cases")
     existing_test_suite = dspy.InputField(
         desc="Existing test suite in JSON format"
     )
-    missing_edge_case_test_cases = dspy.OutputField(
-        desc="List of missing edge case test cases in JSON format"
+    edge_cases = dspy.OutputField(
+        desc="List of edge case test cases in JSON format"
     )
 
 
-# Updated EdgeCaseGenerator
-class EdgeCaseGenerator(dspy.Module):
+# DSPy Modules
+class EdgeCasePredictor(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.generate_edge = dspy.Predict(UserStoryToMissingEdgeCases)
+        self.predict = dspy.Predict(UserStoryToEdgeCasePrediction)
 
-    def needs_edge_cases(self, user_story: str) -> bool:
-        """Determine if edge cases might be relevant based on user story content."""
-        edge_keywords = [
-            "deactivated",
-            "deleted",
-            "limit",
-            "concurrent",
-            "network",
-            "error",
-            "only one",
-        ]
-        return any(keyword in user_story.lower() for keyword in edge_keywords)
+    def forward(self, user_story: str) -> EdgeCasePrediction:
+        """Generate an edge case prediction for the given user story."""
+        prediction = self.predict(user_story=user_story)
+        try:
+            prediction_dict = json.loads(prediction.prediction)
+            return EdgeCasePrediction(**prediction_dict)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse prediction JSON: {e}")
+
+
+class EdgeCaseGeneratorModule(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.generate = dspy.Predict(UserStoryToEdgeCases)
+
+    def forward(
+        self, user_story: str, reason: str, existing_test_suite: str
+    ) -> list:
+        """Generate edge cases based on the inputs."""
+        prediction = self.generate(
+            user_story=user_story,
+            reason=reason,
+            existing_test_suite=existing_test_suite,
+        )
+        try:
+            edge_cases_list = json.loads(prediction.edge_cases)
+            return edge_cases_list
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse edge cases JSON: {e}")
+
+
+# EdgeCaseGenerator Class
+class EdgeCaseGenerator:
+    def __init__(self):
+        """Initialize with predictor and generator modules."""
+        self.predictor = EdgeCasePredictor()
+        self.generator = EdgeCaseGeneratorModule()
+
+    def needs_edge_cases(self, user_story: str) -> EdgeCasePrediction:
+        """Determine if edge cases are needed."""
+        prediction = self.predictor.forward(user_story)
+        logger.info(
+            f"Edge case prediction: {prediction.needs_edge_cases}, Reason: {prediction.reason}"
+        )
+        return prediction
 
     def forward(self, user_story: str, test_suite: TestSuite) -> TestSuite:
-        """Extend the provided TestSuite with missing edge case test cases."""
-        if not self.needs_edge_cases(user_story):
+        """Extend the TestSuite with edge cases if necessary."""
+        prediction = self.needs_edge_cases(user_story)
+        if not prediction.needs_edge_cases:
             logger.info("No edge cases needed for this user story.")
             return test_suite
 
-        # Convert existing test suite to JSON for analysis by the LM
+        # Convert existing test suite to JSON for the generator
         existing_suite_json = test_suite.model_dump_json()
-        prediction = self.generate_edge(
-            user_story=user_story, existing_test_suite=existing_suite_json
+
+        # Generate edge cases based on user story, reason, and existing suite
+        logger.info("Generating edge cases...")
+        edge_cases_list = self.generator.forward(
+            user_story=user_story,
+            reason=prediction.reason,
+            existing_test_suite=existing_suite_json,
         )
-        edge_cases_json = prediction.missing_edge_case_test_cases
-        logger.debug(
-            f"Raw JSON output from model for missing edge cases: {edge_cases_json}"
-        )
 
-        try:
-            edge_cases_list = json.loads(edge_cases_json)
-            if not isinstance(edge_cases_list, list):
-                raise ValueError(
-                    "Edge case output must be a JSON list of test cases"
-                )
+        # Add generated edge cases to the test suite, avoiding duplicates
+        existing_ids = {tc.id for tc in test_suite.test_cases}
+        new_edge_cases = []
+        for edge_case_dict in edge_cases_list:
+            edge_case = TestCase(**edge_case_dict)
+            if edge_case.id not in existing_ids:
+                new_edge_cases.append(edge_case)
+                existing_ids.add(edge_case.id)
 
-            # Append only new edge cases to the suite
-            existing_ids = {
-                tc.id for tc in test_suite.test_cases
-            }  # Track existing IDs to avoid duplicates
-            for edge_case_dict in edge_cases_list:
-                if edge_case_dict.get("id") not in existing_ids:
-                    edge_case = TestCase(**edge_case_dict)
-                    test_suite.test_cases.append(edge_case)
-                    existing_ids.add(edge_case.id)
-            return test_suite
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse edge case test cases JSON: {e}")
-            raise ValueError(f"Failed to parse edge case test cases JSON: {e}")
-        except Exception as e:
-            logger.error(f"Failed to extend TestSuite with edge cases: {e}")
-            raise ValueError(
-                f"Failed to extend TestSuite with edge cases: {e}"
-            )
+        test_suite.test_cases.extend(new_edge_cases)
+        logger.info(f"Generated and added {len(new_edge_cases)} edge cases")
+        return test_suite
 
 
+# Utility Function
 def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
-    if not test_suite or not test_suite.test_cases:
+    """Format the test suite into a Markdown string."""
+    if not test_suite.test_cases:
         return "## No Test Cases Generated\n"
     markdown = f"## {test_suite.title}\n\n"
     for tc in test_suite.test_cases:
@@ -130,17 +159,18 @@ def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
     return markdown
 
 
+# Main Function
 def main():
+    """Main execution function to generate and output the extended test suite."""
     # Load environment variables
     load_dotenv()
-
-    # Configure the language model
     generator_model = "openai/gpt-4o-mini"
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         logger.error("OPENAI_API_KEY environment variable not set.")
         raise ValueError("Please set OPENAI_API_KEY in your environment.")
 
+    # Configure DSPy with the language model
     lm_generator = dspy.LM(
         model=generator_model,
         max_tokens=1000,
@@ -149,7 +179,7 @@ def main():
     )
     dspy.settings.configure(lm=lm_generator)
 
-    # User story from your example
+    # Define user story
     user_story = (
         "# **Extension Tokens**\n\n"
         "## New Extension Tokens have user-based access\n"
@@ -190,7 +220,7 @@ def main():
         "- Legacy tokens will have Global Access (access to all apps, as of today). This will be indicated in the Access Level column. With the tooltip: Token has access to all apps."
     )
 
-    # Initial TestSuite from your example
+    # Define initial test suite
     initial_suite = TestSuite(
         title="Extension Tokens Test Suite",
         test_cases=[
@@ -255,14 +285,14 @@ def main():
         ],
     )
 
-    # Extend with missing edge cases
+    # Generate edge cases and extend the test suite
     logger.info("Starting edge case generation")
     edge_generator = EdgeCaseGenerator()
     extended_suite = edge_generator.forward(
         user_story=user_story, test_suite=initial_suite
     )
 
-    # Format and print output
+    # Format and output the extended test suite
     formatted_output = format_test_suite_to_markdown(extended_suite)
     logger.info("Edge case generation completed")
     print(formatted_output)
