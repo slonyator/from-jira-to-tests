@@ -7,11 +7,10 @@ from dspy.teleprompt import LabeledFewShot
 
 class TestCase(BaseModel):
     id: str = Field(..., description="Unique test case identifier")
+    title: str = Field(..., description="Test case title")
     module: str = Field(..., description="Module being tested")
     priority: str = Field(..., description="Test priority")
-    type: str = Field(
-        ..., description="Test type"
-    )  # Made required to ensure explicit setting
+    type: str = Field(..., description="Test type")
     prerequisites: list[str] = Field(default_factory=list)
     steps: list[str] = Field(..., description="Detailed test steps")
     expected_results: list[str] = Field(..., description="Expected outcomes")
@@ -40,6 +39,7 @@ example_user_story_1 = (
 
 example_test_case_1 = TestCase(
     id="TC-001",
+    title="User Account Creation",
     module="Account Management",
     priority="High",
     type="Functional",
@@ -68,6 +68,7 @@ example_user_story_2 = (
 
 example_test_case_2 = TestCase(
     id="TC001",
+    title="ATM Cash Withdrawal",
     module="ATM Services",
     priority="High",
     type="Functional",
@@ -136,12 +137,10 @@ class TestCaseGenerator(dspy.Module):
 def format_test_suite_to_markdown(test_suite: TestSuite) -> str:
     markdown = f"## {test_suite.title}\n\n"
     for tc in test_suite.test_cases:
-        markdown += f"### Test Case {tc.id}\n"
+        markdown += f"### Test Case {tc.id}: {tc.title}\n"
         markdown += f"**Module:** {tc.module}\n"
         markdown += f"**Priority:** {tc.priority}\n"
-        markdown += (
-            f"**Type:** {tc.type}\n"  # Explicitly include type in output
-        )
+        markdown += f"**Type:** {tc.type}\n"
         if tc.prerequisites:
             markdown += "#### Prerequisites\n"
             for prereq in tc.prerequisites:
