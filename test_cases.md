@@ -1,7 +1,10 @@
+# Test Suite: Token Access & Management
+*Generated on: 2025-03-16*
+
 ## Extension Tokens Test Suite
 
-### Test Case TC-001
-**Module:** Token Creation
+### Test Case TC-001: Create Non-Legacy Token
+**Module:** Token Management
 **Priority:** High
 **Type:** Functional
 #### Prerequisites
@@ -11,82 +14,152 @@
 1. Navigate to the token management page
 2. Click on 'Create New Token' button
 #### Expected Results
-- New non-legacy token is created successfully
+- Non-legacy token is created successfully
 - Token is displayed in the token list
 - 'Create New Token' button is disabled
 
-### Test Case TC-002
-**Module:** Token Access
-**Priority:** High
+### Test Case TC-002: View Non-Legacy Token Access
+**Module:** Token Management
+**Priority:** Medium
 **Type:** Functional
 #### Prerequisites
-- User has created a non-legacy token
+- User has a non-legacy token
 #### Test Steps
-1. Use the created token to access applications
+1. Navigate to the token management page
+2. Locate the non-legacy token in the list
+3. Hover over the Access Level column
 #### Expected Results
-- Token only accesses applications available to the creator
-- Group 'Everyone' is included in access
-- Group 'Unassigned Users' is included if applicable
+- Access Level shows 'Creator Access'
+- Tooltip displays 'Token inherits access permissions from the creator'
 
-### Test Case TC-003
-**Module:** Token Deactivation
+### Test Case TC-003: Token Access Limitations for Deactivated User
+**Module:** Token Access
 **Priority:** High
 **Type:** Functional
 #### Prerequisites
 - User has a non-legacy token
 - User is deactivated
 #### Test Steps
-1. Deactivate the user account
+1. Attempt to use the non-legacy token
 #### Expected Results
-- Non-legacy token is automatically deactivated
+- Token is automatically deactivated
+- User cannot access applications with the token
 
-### Test Case TC-004
-**Module:** Token Deletion
+### Test Case TC-004: Token Access Limitations for Deleted User
+**Module:** Token Access
 **Priority:** High
 **Type:** Functional
 #### Prerequisites
 - User has a non-legacy token
 - User is deleted from the account
 #### Test Steps
-1. Delete the user account
+1. Attempt to use the non-legacy token
 #### Expected Results
-- Non-legacy token is automatically deleted
+- Token is automatically deleted
+- User cannot access applications with the token
 
-### Test Case TC-005
-**Module:** Legacy Token Visibility
+### Test Case TC-005: View Legacy Tokens as Admin
+**Module:** Token Management
 **Priority:** Medium
 **Type:** Functional
 #### Prerequisites
-- User is a regular or limited user
-- User has created legacy tokens
+- User is logged in as Admin/DevOps
 #### Test Steps
 1. Navigate to the token management page
 #### Expected Results
-- Legacy tokens are not displayed in the list
+- All legacy tokens are displayed in the list
+- Admin/DevOps can view and delete legacy tokens
 
-### Test Case TC-006
-**Module:** Admin Token Management
+### Test Case TC-006: Legacy Token Access for Regular Users
+**Module:** Token Management
 **Priority:** High
 **Type:** Functional
 #### Prerequisites
-- User is an Admin or DevOps
+- User is logged in as Regular/Limited user
 #### Test Steps
 1. Navigate to the token management page
 #### Expected Results
-- Admin can view all legacy tokens
-- Admin can delete legacy tokens
-- Admin cannot copy/download/refresh legacy tokens
+- No legacy tokens are displayed in the list
+- User cannot view any legacy tokens
 
-### Test Case TC-007
-**Module:** Legacy Token Access
+### Test Case TC-007: Disable Actions for Legacy Tokens
+**Module:** Token Management
 **Priority:** Medium
 **Type:** Functional
 #### Prerequisites
-- User is an Admin or DevOps
-- Legacy tokens exist
+- User is logged in as Admin/DevOps
+- Legacy tokens are present
 #### Test Steps
-1. Check access level of legacy tokens
+1. Locate a legacy token in the list
+2. Attempt to copy/download/refresh the legacy token
 #### Expected Results
-- Legacy tokens have Global Access
-- Tooltip indicates 'Token has access to all apps'
+- Copy/download/refresh actions are disabled for legacy tokens
+
+### Test Case EC-001: Reactivation of Deactivated User
+**Module:** Token Access
+**Priority:** High
+**Type:** Functional
+#### Prerequisites
+- User has a non-legacy token
+- User is deactivated
+#### Test Steps
+1. Reactivate the user account
+2. Attempt to use the non-legacy token
+#### Expected Results
+- Token is reactivated
+- User can access applications with the token
+
+### Test Case EC-002: User in Multiple Groups at Token Creation
+**Module:** Token Management
+**Priority:** Medium
+**Type:** Functional
+#### Prerequisites
+- User is logged in
+- User belongs to multiple groups
+#### Test Steps
+1. Create a non-legacy token
+#### Expected Results
+- Token inherits access from all groups the user belongs to
+- Access Level reflects combined group access
+
+### Test Case EC-003: Legacy Token Visibility for Deleted User
+**Module:** Token Management
+**Priority:** Medium
+**Type:** Functional
+#### Prerequisites
+- User has created a legacy token
+- User is deleted from the account
+#### Test Steps
+1. Log in as Admin/DevOps
+2. Navigate to the token management page
+#### Expected Results
+- Legacy token created by the deleted user is still visible
+- Admin/DevOps can delete the legacy token
+
+### Test Case EC-004: Token Access After Group Assignment Change
+**Module:** Token Access
+**Priority:** High
+**Type:** Functional
+#### Prerequisites
+- User has a non-legacy token
+- User is assigned to a custom group
+#### Test Steps
+1. Change the user's group assignment
+2. Attempt to use the non-legacy token
+#### Expected Results
+- Token access is updated based on new group assignments
+- User can only access applications in the new group
+
+### Test Case EC-005: Legacy Token Access for Admin/DevOps
+**Module:** Token Management
+**Priority:** Medium
+**Type:** Functional
+#### Prerequisites
+- User is logged in as Admin/DevOps
+- Legacy tokens are present
+#### Test Steps
+1. Attempt to copy/download/refresh a legacy token
+#### Expected Results
+- Actions are disabled for legacy tokens
+- Admin/DevOps can only view and delete
 
