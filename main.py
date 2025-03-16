@@ -7,6 +7,7 @@ import dspy
 from dotenv import load_dotenv
 from loguru import logger
 
+from src.output_formatter import OutputFormatter
 from src.gap_analyzer import (
     RequirementGapAnalyzer,
     ClarificationTestCaseGenerator,
@@ -42,6 +43,7 @@ class TestCaseGeneratorApp:
             temperature=0.0,
             api_key=os.environ["OPENAI_API_KEY"],
         )
+        self.output_formatter = OutputFormatter()
 
     def generate_test_cases(
         self, user_story: str
@@ -98,82 +100,6 @@ class TestCaseGeneratorApp:
 
         return main_test_suite, edge_test_suite, gaps_with_tests
 
-    def format_test_cases(self, test_cases: list[TestCase], title: str) -> str:
-        """Format a list of test cases into Markdown."""
-        md = f"# {title}\n\n"
-        if not test_cases:
-            md += "No test cases generated.\n"
-        else:
-            for tc in test_cases:
-                md += f"## {tc.id}: {tc.title}\n"
-                md += f"- **Module:** {tc.module}\n"
-                md += f"- **Priority:** {tc.priority}\n"
-                md += f"- **Type:** {tc.type}\n"
-                md += "- **Prerequisites:**\n"
-                for prereq in tc.prerequisites:
-                    md += f"  - {prereq}\n"
-                md += "- **Steps:**\n"
-                for step in tc.steps:
-                    md += f"  - {step}\n"
-                md += "- **Expected Results:**\n"
-                for result in tc.expected_results:
-                    md += f"  - {result}\n"
-                md += "\n"
-        return md
-
-    def format_additional_test_cases(self, gaps_with_tests: list[dict]) -> str:
-        """Format additional test cases grouped by gap into Markdown."""
-        md = "# Additional Tests for Gaps\n\n"
-        if not gaps_with_tests:
-            md += "No additional tests needed.\n"
-        else:
-            for item in gaps_with_tests:
-                gap = item["gap"]
-                tests = item["tests"]
-                md += f"## Gap: {gap['description']}\n"
-                md += f"- **Suggested Clarification:** {gap['suggested_clarification']}\n"
-                md += f"- **Confidence Level:** {gap['confidence_level']}\n\n"
-                for tc in tests:
-                    md += f"### {tc.id}: {tc.title}\n"
-                    md += f"- **Module:** {tc.module}\n"
-                    md += f"- **Priority:** {tc.priority}\n"
-                    md += f"- **Type:** {tc.type}\n"
-                    md += "- **Prerequisites:**\n"
-                    for prereq in tc.prerequisites:
-                        md += f"  - {prereq}\n"
-                    md += "- **Steps:**\n"
-                    for step in tc.steps:
-                        md += f"  - {step}\n"
-                    md += "- **Expected Results:**\n"
-                    for result in tc.expected_results:
-                        md += f"  - {result}\n"
-                    md += "\n"
-        return md
-
-    def format_gap_analysis(self, gaps_with_tests: list[dict]) -> str:
-        """Format gap analysis findings into Markdown."""
-        md = "# Gap Analysis\n\n"
-        if not gaps_with_tests:
-            md += "No gaps identified.\n"
-        else:
-            for i, item in enumerate(gaps_with_tests, start=1):
-                gap = item["gap"]
-                related_tests = [tc.id for tc in item["tests"]]
-                md += f"## Gap {i}\n"
-                md += f"- **Description:** {gap['description']}\n"
-                md += f"- **Suggested Clarification:** {gap['suggested_clarification']}\n"
-                md += f"- **Confidence Level:** {gap['confidence_level']}\n"
-                if related_tests:
-                    md += (
-                        "- **Related Test Cases:** "
-                        + ", ".join(related_tests)
-                        + "\n"
-                    )
-                else:
-                    md += "- **Related Test Cases:** None\n"
-                md += "\n"
-        return md
-
     async def process_input(self, input_data: str):
         """Process input and generate separate Markdown files."""
         if not input_data.strip():
@@ -184,7 +110,7 @@ class TestCaseGeneratorApp:
         validator = UserStoryValidator()
         result = validator(story=input_data)
         if not result.is_valid:
-            logger.info(f"Error: {result.error_message}")
+            logger.error(f"{result.error_message}")
             logger.info("User story is invalid, no test cases generated.")
             return
 
@@ -194,20 +120,24 @@ class TestCaseGeneratorApp:
         )
 
         logger.info("Format test cases to markdown")
-        main_md = self.format_test_cases(
+        main_md = self.output_formatter.format_test_cases(
             main_test_suite.test_cases, "Main Test Cases"
         )
 
         logger.info("Format edge case tests to markdown")
-        edge_md = self.format_test_cases(
+        edge_md = self.output_formatter.format_test_cases(
             edge_test_suite.test_cases, "Edge Case Tests"
         )
 
         logger.info("Format additional test cases to markdown")
-        additional_md = self.format_additional_test_cases(gaps_with_tests)
+        additional_md = self.output_formatter.format_additional_test_cases(
+            gaps_with_tests
+        )
 
         logger.info("Format gap analysis to markdown")
-        gap_analysis_md = self.format_gap_analysis(gaps_with_tests)
+        gap_analysis_md = self.output_formatter.format_gap_analysis(
+            gaps_with_tests
+        )
 
         logger.info("Ensure output directory exists")
         os.makedirs("./output", exist_ok=True)
@@ -282,7 +212,7 @@ async def main():
         await app.run(file_path=args.file)
     except Exception as e:
         logger.error(f"Application error: {str(e)}")
-        print(f"Error: {str(e)}", file=sys.stderr)
+        logger.info(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
 
 
