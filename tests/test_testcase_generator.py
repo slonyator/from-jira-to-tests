@@ -13,6 +13,7 @@ class TestTestCase:
         """Test successful creation of a TestCase with all required fields."""
         testcase = TestCase(
             id="TC001",
+            title="Login Test Case",
             module="Login",
             priority="High",
             type="Functional",
@@ -23,6 +24,7 @@ class TestTestCase:
         default_value = []
 
         assert testcase.id == "TC001"
+        assert testcase.title == "Login Test Case"
         assert testcase.module == "Login"
         assert testcase.priority == "High"
         assert testcase.type == "Functional"
@@ -30,9 +32,10 @@ class TestTestCase:
         assert testcase.steps == ["Step 1", "Step 2"]
         assert testcase.expected_results == ["Result 1", "Result 2"]
 
-    def test_testcase_missing_field(self):
+    def test_testcase_missing_fields(self):
         """Test that ValidationError is raised when a required field is missing."""
         with pytest.raises(ValidationError):
+            # Both 'expected_results' and 'title' are missing here
             TestCase(
                 id="TC001",
                 module="Login",
@@ -45,6 +48,7 @@ class TestTestCase:
         """Test that prerequisites defaults to an empty list."""
         testcase = TestCase(
             id="TC001",
+            title="Login Test Case",
             module="Login",
             priority="High",
             type="Functional",
@@ -59,6 +63,7 @@ class TestTestSuite:
         """Test successful creation of a TestSuite with a title and test cases."""
         testcase = TestCase(
             id="TC001",
+            title="Login Test Case",
             module="Login",
             priority="High",
             type="Functional",
@@ -93,6 +98,7 @@ class TestTestCaseGenerator:
             "test_cases": [
                 {
                     "id": "TC-MOCK",
+                    "title": "Mocked Test Case",
                     "module": "Mock",
                     "priority": "High",
                     "type": "Functional",
@@ -114,6 +120,7 @@ class TestTestCaseGenerator:
 
         assert result.title == "Mocked Suite"
         assert result.test_cases[0].id == "TC-MOCK"
+        assert result.test_cases[0].title == "Mocked Test Case"
         mock_generate.assert_called_once_with(user_story=user_story)
 
     def test_forward_with_empty_story(self, mocker):
