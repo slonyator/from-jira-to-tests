@@ -1,4 +1,3 @@
-# gap_analyzer.py
 import json
 from loguru import logger
 from pydantic import BaseModel
@@ -36,23 +35,16 @@ class RequirementGapAnalyzer(dspy.Module):
         self.analyze = dspy.ChainOfThought(GapAnalysisSignature)
 
     def forward(self, user_story: str) -> list[dict]:
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                prediction = self.analyze(user_story=user_story)
-                gaps_list = json.loads(prediction.gaps)
-                if isinstance(gaps_list, list):
-                    return gaps_list
-                else:
-                    raise ValueError("Gaps are not a list")
-            except (json.JSONDecodeError, ValueError) as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"Failed after {max_retries} attempts: {e}")
-                    return []
-                else:
-                    logger.warning(
-                        f"Attempt {attempt + 1} failed: {e}, retrying..."
-                    )
+        try:
+            prediction = self.analyze(user_story=user_story)
+            gaps_list = json.loads(prediction.gaps)
+            if isinstance(gaps_list, list):
+                return gaps_list
+            else:
+                raise ValueError("Gaps are not a list")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Failed to analyze gaps: {e}")
+            return []
 
 
 class ClarificationTestCaseGenerator(dspy.Module):
@@ -61,22 +53,15 @@ class ClarificationTestCaseGenerator(dspy.Module):
         self.generate = dspy.Predict(ClarificationToTestCasesSignature)
 
     def forward(self, user_story: str, clarification: str) -> list[dict]:
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                prediction = self.generate(
-                    user_story=user_story, clarification=clarification
-                )
-                test_cases_list = json.loads(prediction.test_cases)
-                if isinstance(test_cases_list, list):
-                    return test_cases_list
-                else:
-                    raise ValueError("Test cases are not a list")
-            except (json.JSONDecodeError, ValueError) as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"Failed after {max_retries} attempts: {e}")
-                    return []
-                else:
-                    logger.warning(
-                        f"Attempt {attempt + 1} failed: {e}, retrying..."
-                    )
+        try:
+            prediction = self.generate(
+                user_story=user_story, clarification=clarification
+            )
+            test_cases_list = json.loads(prediction.test_cases)
+            if isinstance(test_cases_list, list):
+                return test_cases_list
+            else:
+                raise ValueError("Test cases are not a list")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Failed to generate test cases: {e}")
+            return []
