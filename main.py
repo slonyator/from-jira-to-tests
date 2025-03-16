@@ -44,15 +44,13 @@ class TestCaseGeneratorApp:
         logger.info("Starting test case generation")
         start_time = datetime.now()
 
-        # Configure the language model for generation
+        logger.info("Configuring language model for test case generation")
         dspy.settings.configure(lm=self.lm_generator)
 
-        # Generate initial functional test cases
         logger.info("Generating functional test cases")
         test_generator = TestCaseGenerator(trainset=trainset)
         test_suite = test_generator.forward(user_story=user_story)
 
-        # Extend with edge cases
         logger.info("Generating edge cases")
         edge_generator = EdgeCaseGenerator()
         extended_suite = edge_generator.forward(
