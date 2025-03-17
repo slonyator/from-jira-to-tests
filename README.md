@@ -2,7 +2,15 @@
 
 ## Description
 
-TBD
+This Python application automatically converts user stories into detailed, 
+functional test cases using AI technology. It empowers development teams to 
+rapidly generate comprehensive test suites directly from agile requirements, 
+significantly streamlining the testing process and enhancing productivity.
+
+### Features:
+- Automatically translates agile user stories into detailed functional test cases.
+- Supports multiple input methods, including command line arguments, standard input (stdin), and input via text files.
+- Provides markdown-formatted documentation of generated test suites.
 
 ### Key Components:
 
