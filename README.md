@@ -166,6 +166,23 @@ uv run main.py --file input_user_story.md
 2025-03-17 01:42:17.848 | INFO     | __main__:process_input:201 - - additional_gap_tests.md
 ```
 
+### Output
+
+When you run the application with the command 
+`uv run main.py --file input_user_story.md`, it processes the user story and 
+generates a comprehensive set of test cases and analysis files. These outputs 
+are saved in the `output` directory as Markdown-formatted documents. Here’s 
+what you’ll get:
+
+- **`main_test_cases.md`**: Contains the primary functional test cases derived directly from the user story. These cover the core functionality and ensure the main requirements are testable.
+- **`edge_case_tests.md`**: Includes test cases for edge scenarios, such as unusual inputs or boundary conditions, to verify the system’s robustness.
+- **`gap_analysis.md`**: Lists identified gaps or ambiguities in the user story, along with suggested clarifications, helping you refine requirements.
+- **`additional_gap_tests.md`**: Provides additional test cases specifically designed to address the gaps identified in the gap analysis, ensuring complete coverage.
+
+All output files are automatically saved in the `./output` directory, ready for 
+review or integration into your testing workflow.
+
+
 ## Running Tests
 
 ```bash
