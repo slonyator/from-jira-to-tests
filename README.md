@@ -2,30 +2,27 @@
 
 ## Description
 
-This Python application automatically converts user stories into detailed, 
-functional test cases using AI technology. It empowers development teams to 
-rapidly generate comprehensive test suites directly from agile requirements, 
-significantly streamlining the testing process and enhancing productivity.
+This Python application automatically converts agile user stories into detailed, functional test cases using advanced AI technology. It streamlines testing by rapidly generating comprehensive test suites directly from agile project requirements, enhancing productivity and improving software quality.
 
 ### Features:
-- Automatically translates agile user stories into detailed functional test cases.
-- Supports multiple input methods, including command line arguments, standard input (stdin), and input via text files.
-- Provides markdown-formatted documentation of generated test suites.
+- **AI-Powered Test Case Generation:** Automatically translates agile user stories into detailed, structured functional test cases.
+- **Flexible Input Methods:** Supports command-line arguments, standard input (stdin), and input via text files.
+- **Markdown Outputs:** Provides clean, markdown-formatted documentation for easy integration into project documentation or collaboration tools.
 
-### Key Components:
+### Key Components
 
-- **main.py**: The entry point to execute the application.
-- **gap_analyzer.py**: Identifies gaps within input data or user stories.
-- **validator.py**: Validates input data ensuring integrity and consistency.
-- **output_formatter.py**: Formats analysis results and test suites into readable markdown documents.
-- **suite_generator.py**: Automates generation of main test cases and edge case scenarios.
+- **`main.py`**: The primary script to initiate the application, manage input processing, and trigger test generation.
+- **`gap_analyzer.py`**: Identifies unclear or incomplete elements within user stories, highlighting areas requiring further specification or refinement.
+- **`validator.py`**: Ensures input data integrity by validating user stories for clarity, completeness, and absence of contradictions.
+- **`output_formatter.py`**: Formats the generated test cases and gap analyses into markdown files for readability and easy documentation.
+- **`suite_generator.py`**: Automatically generates comprehensive test suites, including main scenarios, edge cases, and additional tests based on gap analysis.
 
 ## Pre-requisites
 
-Ensure you have the following setup before running the application:
+To successfully run this application, ensure the following requirements are met:
 
-- **Python 3.13** installed on your system.
-- **uv** installed for dependency management.
+- **Python 3.13** installed on your system. You can verify it running `python --version` in your terminal.
+- **uv** installed for dependency management. You can verify it running `uv --version` in your terminal.
 - A valid `.env` file containing your OpenAI API key, formatted as:
   
 ```bash
@@ -80,6 +77,19 @@ uv run main.py --file input_user_story.md
 ```
 
 ### Logs
+
+Logs generated during execution provide detailed insights into the application's workflow:
+
+- Input Reading: Reads and parses the provided user story.
+- Validation: Checks user stories for ambiguity, completeness, and contradictions.
+- Test Generation: 
+  - functional test cases 
+  - edge cases 
+  - identifies requirement gaps 
+  - suggestions for required clarifications
+- Output Generation: Formats and saves all generated files in the output directory.
+
+Logs include timestamps and information levels `(INFO)` to clearly indicate each processing step.
 
 ```bash
 uv run main.py --file input_user_story.md
@@ -184,6 +194,8 @@ review or integration into your testing workflow.
 
 
 ## Running Tests
+
+You can run the unit tests for this application using the following command:
 
 ```bash
 uv run pytest tests
